@@ -1,11 +1,99 @@
-CREATE TABLE IF NOT EXISTS schema_migrations(version TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS solution(id TEXT PRIMARY KEY, name TEXT, description TEXT, source_path TEXT, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS principles(id TEXT PRIMARY KEY, title TEXT, description TEXT);
-CREATE TABLE IF NOT EXISTS repositories(id TEXT PRIMARY KEY, name TEXT, path TEXT, resolved_path TEXT, type TEXT, language TEXT, bounded_context TEXT, description TEXT);
-CREATE TABLE IF NOT EXISTS specs(id TEXT PRIMARY KEY, title TEXT, status TEXT, owner TEXT, problem TEXT, business_goal TEXT, affected_bounded_contexts TEXT, constraints_json TEXT, related_adrs_json TEXT, source_path TEXT);
-CREATE TABLE IF NOT EXISTS adrs(id TEXT PRIMARY KEY, title TEXT, status TEXT, date TEXT, context TEXT, decision TEXT, consequences_json TEXT, related_specs_json TEXT, source_path TEXT);
-CREATE TABLE IF NOT EXISTS guidelines(id TEXT PRIMARY KEY, title TEXT, languages_json TEXT, repository_types_json TEXT, rules_json TEXT, source_path TEXT);
-CREATE TABLE IF NOT EXISTS documents(id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, document_key TEXT NOT NULL, title TEXT, path TEXT, content TEXT, hash TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(type, document_key));
-CREATE TABLE IF NOT EXISTS document_chunks(id INTEGER PRIMARY KEY AUTOINCREMENT, document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE, type TEXT NOT NULL, document_key TEXT NOT NULL, title TEXT, path TEXT, chunk_index INTEGER NOT NULL, content TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS spec_repository_impact(spec_id TEXT NOT NULL, repository_id TEXT NOT NULL, PRIMARY KEY(spec_id, repository_id));
-CREATE TABLE IF NOT EXISTS adr_repository_impact(adr_id TEXT NOT NULL, repository_id TEXT NOT NULL, PRIMARY KEY(adr_id, repository_id));
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version TEXT PRIMARY KEY,
+  applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS solution (
+  id TEXT PRIMARY KEY,
+  name TEXT,
+  description TEXT,
+  source_path TEXT,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS principles (
+  id TEXT PRIMARY KEY,
+  title TEXT,
+  description TEXT
+);
+
+CREATE TABLE IF NOT EXISTS repositories (
+  id TEXT PRIMARY KEY,
+  name TEXT,
+  path TEXT,
+  resolved_path TEXT,
+  type TEXT,
+  language TEXT,
+  bounded_context TEXT,
+  description TEXT
+);
+
+CREATE TABLE IF NOT EXISTS specs (
+  id TEXT PRIMARY KEY,
+  title TEXT,
+  status TEXT,
+  owner TEXT,
+  problem TEXT,
+  business_goal TEXT,
+  affected_bounded_contexts TEXT,
+  constraints_json TEXT,
+  related_adrs_json TEXT,
+  source_path TEXT
+);
+
+CREATE TABLE IF NOT EXISTS adrs (
+  id TEXT PRIMARY KEY,
+  title TEXT,
+  status TEXT,
+  date TEXT,
+  context TEXT,
+  decision TEXT,
+  consequences_json TEXT,
+  related_specs_json TEXT,
+  source_path TEXT
+);
+
+CREATE TABLE IF NOT EXISTS guidelines (
+  id TEXT PRIMARY KEY,
+  title TEXT,
+  languages_json TEXT,
+  repository_types_json TEXT,
+  rules_json TEXT,
+  source_path TEXT
+);
+
+CREATE TABLE IF NOT EXISTS documents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  type TEXT NOT NULL,
+  document_key TEXT NOT NULL,
+  title TEXT,
+  path TEXT,
+  content TEXT,
+  hash TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(type, document_key)
+);
+
+CREATE TABLE IF NOT EXISTS document_chunks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  document_key TEXT NOT NULL,
+  title TEXT,
+  path TEXT,
+  chunk_index INTEGER NOT NULL,
+  content TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS spec_repository_impact (
+  spec_id TEXT NOT NULL,
+  repository_id TEXT NOT NULL,
+  PRIMARY KEY(spec_id, repository_id)
+);
+
+CREATE TABLE IF NOT EXISTS adr_repository_impact (
+  adr_id TEXT NOT NULL,
+  repository_id TEXT NOT NULL,
+  PRIMARY KEY(adr_id, repository_id)
+);

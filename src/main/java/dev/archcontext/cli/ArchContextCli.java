@@ -1,13 +1,184 @@
 package dev.archcontext.cli;
-import dev.archcontext.domain.Models.*;import dev.archcontext.mcp.ArchContextMcpServer;import dev.archcontext.service.*;import dev.archcontext.storage.Database;import picocli.CommandLine;import picocli.CommandLine.*;import java.nio.file.*;import java.util.*;import java.util.concurrent.Callable;
-@Command(name="archcontext", mixinStandardHelpOptions=true, version="0.1.0", description="Local architecture-context MCP server", subcommands={ArchContextCli.Init.class, ArchContextCli.Repo.class, ArchContextCli.ImportCmd.class, ArchContextCli.ExportCmd.class, ArchContextCli.Doctor.class, ArchContextCli.Mcp.class})
-public class ArchContextCli implements Callable<Integer>{ public static void main(String[] args){ System.exit(new CommandLine(new ArchContextCli()).execute(args)); } public Integer call(){ new CommandLine(this).usage(System.err); return 0; } static Path root(){return Path.of("").toAbsolutePath().normalize();}
- @Command(name="init", description="Create .archcontext YAML source tree") static class Init implements Callable<Integer>{ public Integer call() throws Exception{ new WorkspaceService().init(root()); System.err.println("Initialized .archcontext"); return 0; }}
- @Command(name="repo", description="Manage repositories", subcommands={RepoAdd.class, RepoList.class}) static class Repo implements Callable<Integer>{ public Integer call(){return 0;} }
- @Command(name="add", description="Add repository") static class RepoAdd implements Callable<Integer>{ @Parameters(index="0") Path path; @Option(names="--id", required=true) String id; @Option(names="--name") String name; @Option(names="--type") String type; @Option(names="--language") String language; @Option(names="--bounded-context") String boundedContext; @Option(names="--description") String description; @Option(names="--strict") boolean strict; public Integer call() throws Exception{ Path p=path.toAbsolutePath().normalize(); if(!Files.exists(p)){String m="Repository path does not exist: "+p; if(strict) throw new IllegalArgumentException(m); System.err.println("WARN: "+m);} else if(!Files.isDirectory(p.resolve(".git"))){String m="Path does not contain a .git directory: "+p; if(strict) throw new IllegalArgumentException(m); System.err.println("WARN: "+m);} new RepositoryService().add(root(),new RepositoryDefinition(id,name==null?id:name,path.toString(),type,language,boundedContext,description)); System.err.println("Added repository "+id); return 0; }}
- @Command(name="list", description="List repositories") static class RepoList implements Callable<Integer>{ public Integer call() throws Exception{ for(RepositoryDefinition r:new RepositoryService().list(root())) System.out.printf("%s\t%s\t%s\t%s\t%s%n",r.id(),r.name(),r.type(),r.language(),r.path()); return 0; }}
- @Command(name="import", description="Import YAML into SQLite") static class ImportCmd implements Callable<Integer>{ public Integer call(){ new ImportService().importWorkspace(root()); System.err.println("Imported ArchContext YAML into .archcontext/archcontext.db"); return 0; }}
- @Command(name="export", description="Export SQLite data to YAML") static class ExportCmd implements Callable<Integer>{ public Integer call(){ new ExportService().exportWorkspace(root()); return 0; }}
- @Command(name="doctor", description="Validate workspace") static class Doctor implements Callable<Integer>{ public Integer call() throws Exception{ Path r=root(), dir=r.resolve(".archcontext"); int issues=0; if(!Files.isDirectory(dir)){System.err.println("FAIL: .archcontext does not exist"); return 1;} for(String f:List.of("solution.yaml","repositories.yaml")){ if(Files.exists(dir.resolve(f))) System.err.println("OK: "+f); else {System.err.println("FAIL: missing "+f); issues++;}} try{new Database(dir.resolve("archcontext.db")).migrate(); System.err.println("OK: SQLite DB can be opened");}catch(Exception e){System.err.println("FAIL: SQLite DB: "+e.getMessage()); issues++;} RepositoryService rs=new RepositoryService(); var overrides=rs.localOverrides(r); for(RepositoryDefinition repo:rs.list(r)){ Path p=rs.resolvePath(r,repo,overrides); if(p!=null&&Files.exists(p))System.err.println("OK: repository "+repo.id()+" path exists: "+p); else {System.err.println("WARN: repository "+repo.id()+" path missing: "+p);}} return issues==0?0:1; }}
- @Command(name="mcp", description="Start MCP stdio server") static class Mcp implements Callable<Integer>{ public Integer call() throws Exception{ System.setProperty("org.slf4j.simpleLogger.logFile","System.err"); new ArchContextMcpServer(root()).run(); return 0; }}
+
+import dev.archcontext.domain.Models.*;
+import dev.archcontext.mcp.ArchContextMcpServer;
+import dev.archcontext.service.*;
+import dev.archcontext.storage.Database;
+import java.nio.file.*;
+import java.util.*;
+import java.util.concurrent.Callable;
+import picocli.CommandLine;
+import picocli.CommandLine.*;
+
+@Command(
+    name = "archcontext",
+    mixinStandardHelpOptions = true,
+    version = "0.1.0",
+    description = "Local architecture-context MCP server",
+    subcommands = {
+      ArchContextCli.Init.class,
+      ArchContextCli.Repo.class,
+      ArchContextCli.ImportCmd.class,
+      ArchContextCli.ExportCmd.class,
+      ArchContextCli.Doctor.class,
+      ArchContextCli.Mcp.class
+    })
+public class ArchContextCli implements Callable<Integer> {
+  public static void main(String[] args) {
+    System.exit(new CommandLine(new ArchContextCli()).execute(args));
+  }
+
+  public Integer call() {
+    new CommandLine(this).usage(System.err);
+    return 0;
+  }
+
+  static Path root() {
+    return Path.of("").toAbsolutePath().normalize();
+  }
+
+  @Command(name = "init", description = "Create .archcontext YAML source tree")
+  static class Init implements Callable<Integer> {
+    public Integer call() throws Exception {
+      new WorkspaceService().init(root());
+      System.err.println("Initialized .archcontext");
+      return 0;
+    }
+  }
+
+  @Command(
+      name = "repo",
+      description = "Manage repositories",
+      subcommands = {RepoAdd.class, RepoList.class})
+  static class Repo implements Callable<Integer> {
+    public Integer call() {
+      return 0;
+    }
+  }
+
+  @Command(name = "add", description = "Add repository")
+  static class RepoAdd implements Callable<Integer> {
+    @Parameters(index = "0")
+    Path path;
+
+    @Option(names = "--id", required = true)
+    String id;
+
+    @Option(names = "--name")
+    String name;
+
+    @Option(names = "--type")
+    String type;
+
+    @Option(names = "--language")
+    String language;
+
+    @Option(names = "--bounded-context")
+    String boundedContext;
+
+    @Option(names = "--description")
+    String description;
+
+    @Option(names = "--strict")
+    boolean strict;
+
+    public Integer call() throws Exception {
+      Path p = path.toAbsolutePath().normalize();
+      if (!Files.exists(p)) {
+        String m = "Repository path does not exist: " + p;
+        if (strict) throw new IllegalArgumentException(m);
+        System.err.println("WARN: " + m);
+      } else if (!Files.isDirectory(p.resolve(".git"))) {
+        String m = "Path does not contain a .git directory: " + p;
+        if (strict) throw new IllegalArgumentException(m);
+        System.err.println("WARN: " + m);
+      }
+      new RepositoryService()
+          .add(
+              root(),
+              new RepositoryDefinition(
+                  id,
+                  name == null ? id : name,
+                  path.toString(),
+                  type,
+                  language,
+                  boundedContext,
+                  description));
+      System.err.println("Added repository " + id);
+      return 0;
+    }
+  }
+
+  @Command(name = "list", description = "List repositories")
+  static class RepoList implements Callable<Integer> {
+    public Integer call() throws Exception {
+      for (RepositoryDefinition r : new RepositoryService().list(root()))
+        System.out.printf(
+            "%s\t%s\t%s\t%s\t%s%n", r.id(), r.name(), r.type(), r.language(), r.path());
+      return 0;
+    }
+  }
+
+  @Command(name = "import", description = "Import YAML into SQLite")
+  static class ImportCmd implements Callable<Integer> {
+    public Integer call() {
+      new ImportService().importWorkspace(root());
+      System.err.println("Imported ArchContext YAML into .archcontext/archcontext.db");
+      return 0;
+    }
+  }
+
+  @Command(name = "export", description = "Export SQLite data to YAML")
+  static class ExportCmd implements Callable<Integer> {
+    public Integer call() {
+      new ExportService().exportWorkspace(root());
+      return 0;
+    }
+  }
+
+  @Command(name = "doctor", description = "Validate workspace")
+  static class Doctor implements Callable<Integer> {
+    public Integer call() throws Exception {
+      Path r = root(), dir = r.resolve(".archcontext");
+      int issues = 0;
+      if (!Files.isDirectory(dir)) {
+        System.err.println("FAIL: .archcontext does not exist");
+        return 1;
+      }
+      for (String f : List.of("solution.yaml", "repositories.yaml")) {
+        if (Files.exists(dir.resolve(f))) System.err.println("OK: " + f);
+        else {
+          System.err.println("FAIL: missing " + f);
+          issues++;
+        }
+      }
+      try {
+        new Database(dir.resolve("archcontext.db")).migrate();
+        System.err.println("OK: SQLite DB can be opened");
+      } catch (Exception e) {
+        System.err.println("FAIL: SQLite DB: " + e.getMessage());
+        issues++;
+      }
+      RepositoryService rs = new RepositoryService();
+      var overrides = rs.localOverrides(r);
+      for (RepositoryDefinition repo : rs.list(r)) {
+        Path p = rs.resolvePath(r, repo, overrides);
+        if (p != null && Files.exists(p))
+          System.err.println("OK: repository " + repo.id() + " path exists: " + p);
+        else {
+          System.err.println("WARN: repository " + repo.id() + " path missing: " + p);
+        }
+      }
+      return issues == 0 ? 0 : 1;
+    }
+  }
+
+  @Command(name = "mcp", description = "Start MCP stdio server")
+  static class Mcp implements Callable<Integer> {
+    public Integer call() throws Exception {
+      System.setProperty("org.slf4j.simpleLogger.logFile", "System.err");
+      new ArchContextMcpServer(root()).run();
+      return 0;
+    }
+  }
 }

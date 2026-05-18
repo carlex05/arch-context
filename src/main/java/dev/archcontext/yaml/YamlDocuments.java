@@ -1,6 +1,8 @@
 package dev.archcontext.yaml;
+
 import dev.archcontext.domain.Models.*;
 import java.util.*;
+
 public class YamlDocuments {
   public String schemaVersion = "1.0";
   public Solution solution;

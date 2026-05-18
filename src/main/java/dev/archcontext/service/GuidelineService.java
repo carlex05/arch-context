@@ -1,1 +1,17 @@
-package dev.archcontext.service; import dev.archcontext.domain.Models.*; import java.nio.file.*; import java.util.*; public class GuidelineService { private final McpContextService c; public GuidelineService(Path r){c=new McpContextService(r);} public List<Guideline> list(){return c.listGuidelines();} }
+package dev.archcontext.service;
+
+import dev.archcontext.domain.Models.*;
+import java.nio.file.*;
+import java.util.*;
+
+public class GuidelineService {
+  private final McpContextService c;
+
+  public GuidelineService(Path r) {
+    c = new McpContextService(r);
+  }
+
+  public List<Guideline> list() {
+    return c.listGuidelines();
+  }
+}

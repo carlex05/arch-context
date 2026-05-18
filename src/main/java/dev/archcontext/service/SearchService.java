@@ -1,3 +1,58 @@
 package dev.archcontext.service;
-import dev.archcontext.domain.Models.*;import dev.archcontext.storage.Database;import java.nio.file.*;import java.sql.*;import java.util.*;
-public class SearchService { private final Path root; public SearchService(Path root){this.root=root;} public List<DocumentChunk> search(String query,List<String> types,int limit){ if(query==null||query.isBlank())return List.of(); List<DocumentChunk> out=new ArrayList<>(); String typeSql=types==null||types.isEmpty()?"":" AND type IN ("+String.join(",", Collections.nCopies(types.size(),"?"))+")"; String sql="SELECT document_id,type,document_key,title,path,content FROM document_chunks WHERE lower(content) LIKE ?"+typeSql+" LIMIT ?"; try(Connection c=new Database(root.resolve(".archcontext/archcontext.db")).connect(); PreparedStatement ps=c.prepareStatement(sql)){ int i=1; ps.setString(i++, "%"+query.toLowerCase(Locale.ROOT)+"%"); if(types!=null) for(String t:types) ps.setString(i++, t); ps.setInt(i, limit); try(ResultSet rs=ps.executeQuery()){ while(rs.next()) out.add(new DocumentChunk(rs.getLong(1),rs.getString(2),rs.getString(3),rs.getString(4),rs.getString(5),snippet(rs.getString(6),query),1.0)); }}catch(Exception e){throw new IllegalStateException("Search failed: "+e.getMessage(),e);} return out;} private String snippet(String s,String q){int i=s.toLowerCase(Locale.ROOT).indexOf(q.toLowerCase(Locale.ROOT)); if(i<0)return s.length()>300?s.substring(0,300):s; int a=Math.max(0,i-120), b=Math.min(s.length(),i+q.length()+180); return s.substring(a,b);}}
+
+import dev.archcontext.domain.Models.*;
+import dev.archcontext.storage.Database;
+import java.nio.file.*;
+import java.sql.*;
+import java.util.*;
+
+public class SearchService {
+  private final Path root;
+
+  public SearchService(Path root) {
+    this.root = root;
+  }
+
+  public List<DocumentChunk> search(String query, List<String> types, int limit) {
+    if (query == null || query.isBlank()) return List.of();
+    List<DocumentChunk> out = new ArrayList<>();
+    String typeSql =
+        types == null || types.isEmpty()
+            ? ""
+            : " AND type IN (" + String.join(",", Collections.nCopies(types.size(), "?")) + ")";
+    String sql =
+        "SELECT document_id,type,document_key,title,path,content FROM document_chunks WHERE"
+            + " lower(content) LIKE ?"
+            + typeSql
+            + " LIMIT ?";
+    try (Connection c = new Database(root.resolve(".archcontext/archcontext.db")).connect();
+        PreparedStatement ps = c.prepareStatement(sql)) {
+      int i = 1;
+      ps.setString(i++, "%" + query.toLowerCase(Locale.ROOT) + "%");
+      if (types != null) for (String t : types) ps.setString(i++, t);
+      ps.setInt(i, limit);
+      try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next())
+          out.add(
+              new DocumentChunk(
+                  rs.getLong(1),
+                  rs.getString(2),
+                  rs.getString(3),
+                  rs.getString(4),
+                  rs.getString(5),
+                  snippet(rs.getString(6), query),
+                  1.0));
+      }
+    } catch (Exception e) {
+      throw new IllegalStateException("Search failed: " + e.getMessage(), e);
+    }
+    return out;
+  }
+
+  private String snippet(String s, String q) {
+    int i = s.toLowerCase(Locale.ROOT).indexOf(q.toLowerCase(Locale.ROOT));
+    if (i < 0) return s.length() > 300 ? s.substring(0, 300) : s;
+    int a = Math.max(0, i - 120), b = Math.min(s.length(), i + q.length() + 180);
+    return s.substring(a, b);
+  }
+}
