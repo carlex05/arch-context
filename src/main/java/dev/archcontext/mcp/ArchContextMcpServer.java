@@ -233,7 +233,82 @@ public class ArchContextMcpServer {
                     requiredString(args, "requirementType"),
                     new Requirement(
                         requiredString(args, "id"), requiredString(args, "description")),
-                    bool(args.get("dryRun")))));
+                    bool(args.get("dryRun")))),
+        tool(
+            "upsert_spec_acceptance_criterion",
+            "Add or update one acceptance criterion in an existing spec YAML.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "id",
+                    stringProperty("Acceptance criterion id"),
+                    "description",
+                    stringProperty("Acceptance criterion description"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "specId",
+                "id",
+                "description"),
+            args ->
+                writer.upsertSpecAcceptanceCriterion(
+                    requiredString(args, "specId"),
+                    new AcceptanceCriterion(
+                        requiredString(args, "id"), requiredString(args, "description")),
+                    bool(args.get("dryRun")))),
+        tool(
+            "add_spec_out_of_scope_item",
+            "Add one out-of-scope item to an existing spec YAML, avoiding duplicate descriptions.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "description",
+                    stringProperty("Out-of-scope item description"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "specId",
+                "description"),
+            args ->
+                writer.addSpecOutOfScopeItem(
+                    requiredString(args, "specId"),
+                    new OutOfScopeItem(requiredString(args, "description")),
+                    bool(args.get("dryRun")))),
+        tool(
+            "upsert_spec_constraint",
+            "Add or update one structured constraint in an existing spec YAML without removing"
+                + " legacy constraints.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "id",
+                    stringProperty("Constraint id"),
+                    "title",
+                    stringProperty("Optional constraint title"),
+                    "description",
+                    stringProperty("Constraint description"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "specId",
+                "id",
+                "description"),
+            args ->
+                writer.upsertSpecConstraint(
+                    requiredString(args, "specId"),
+                    new Constraint(
+                        requiredString(args, "id"),
+                        optionalString(args, "title"),
+                        requiredString(args, "description")),
+                    bool(args.get("dryRun")))),
+        tool(
+            "validate_workspace",
+            "Validate repository references, component references, active spec readiness, related"
+                + " ADR references, and supported schema versions without writing files.",
+            strictObjectSchema(
+                Map.of("strict", booleanProperty("Treat warnings such as missing ADRs as errors")),
+                List.of()),
+            args -> writer.validateWorkspace(bool(args.get("strict")))));
   }
 
   List<McpServerFeatures.SyncPromptSpecification> promptSpecifications() {
@@ -317,7 +392,8 @@ public class ArchContextMcpServer {
       Object data = handler.call(arguments == null ? Map.of() : arguments);
       Object structured = Map.of("data", Json.MAPPER.convertValue(data, Object.class));
       boolean isToolError =
-          data instanceof WriteResult result && !result.validation().errors().isEmpty();
+          (data instanceof WriteResult result && !result.validation().errors().isEmpty())
+              || (data instanceof WriteValidation validation && !validation.errors().isEmpty());
       return McpSchema.CallToolResult.builder()
           .content(List.of(new McpSchema.TextContent(Json.write(data))))
           .structuredContent(structured)

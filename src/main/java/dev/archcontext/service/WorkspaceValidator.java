@@ -27,6 +27,41 @@ public class WorkspaceValidator {
     return new WriteValidation(errors, warnings);
   }
 
+  public WriteValidation validateWorkspace(Path root, boolean strict) {
+    List<String> errors = new ArrayList<>();
+    List<String> warnings = new ArrayList<>();
+    validateSchemaVersions(root, strict, errors, warnings);
+    try {
+      Map<String, RepositoryDefinition> repositories =
+          repositoryService.list(root).stream()
+              .collect(Collectors.toMap(RepositoryDefinition::id, r -> r, (a, b) -> a));
+      Set<String> adrIds = adrIds(root);
+      for (Spec spec : specs(root)) {
+        WriteValidation specValidation = validateSpec(root, spec);
+        errors.addAll(specValidation.errors());
+        warnings.addAll(specValidation.warnings());
+        for (String adrId : nvl(spec.relatedAdrs())) {
+          if (!adrIds.contains(adrId)) {
+            String message = "Unknown related ADR in spec " + spec.id() + ": " + adrId;
+            if (strict) errors.add(message);
+            else warnings.add(message);
+          }
+        }
+        for (String repositoryId : nvl(spec.affectedRepositories())) {
+          if (!repositories.containsKey(repositoryId)) {
+            errors.add("Unknown affected repository in spec " + spec.id() + ": " + repositoryId);
+          }
+        }
+        if ("active".equalsIgnoreCase(spec.status()) && nvl(spec.acceptanceCriteria()).isEmpty()) {
+          warnings.add("Active spec has no acceptance criteria: " + spec.id());
+        }
+      }
+    } catch (IOException e) {
+      errors.add("Cannot validate workspace: " + e.getMessage());
+    }
+    return new WriteValidation(distinct(errors), distinct(warnings));
+  }
+
   public WriteValidation validateSpec(Path root, Spec spec) {
     List<String> errors = new ArrayList<>();
     List<String> warnings = new ArrayList<>();
@@ -36,10 +71,6 @@ public class WorkspaceValidator {
     if (blank(spec.owner())) errors.add("Spec owner is required.");
     if (blank(spec.problem())) errors.add("Spec problem is required.");
     if (blank(spec.businessGoal())) errors.add("Spec businessGoal is required.");
-
-    if ("active".equalsIgnoreCase(spec.status()) && nvl(spec.acceptanceCriteria()).isEmpty()) {
-      errors.add("Active specs must have at least one acceptance criterion.");
-    }
 
     try {
       Map<String, RepositoryDefinition> repositories =
@@ -111,6 +142,87 @@ public class WorkspaceValidator {
         errors.add("Unknown component reference: " + ref.repositoryId() + ":" + ref.componentId());
       }
     }
+  }
+
+  private void validateSchemaVersions(
+      Path root, boolean strict, List<String> errors, List<String> warnings) {
+    Path dir = root.resolve(".archcontext");
+    List<Path> files = new ArrayList<>();
+    for (String name : List.of("solution.yaml", "repositories.yaml")) {
+      Path file = dir.resolve(name);
+      if (Files.exists(file)) files.add(file);
+    }
+    for (String subdir : List.of("specs", "adrs", "guidelines")) {
+      Path child = dir.resolve(subdir);
+      if (Files.isDirectory(child)) {
+        try (var paths = Files.list(child)) {
+          files.addAll(
+              paths
+                  .filter(p -> p.getFileName().toString().endsWith(".yaml"))
+                  .sorted()
+                  .toList());
+        } catch (IOException e) {
+          errors.add("Cannot read " + child + ": " + e.getMessage());
+        }
+      }
+    }
+    for (Path file : files) {
+      try {
+        String schemaVersion = schemaVersion(file);
+        if (!Set.of("1.0", "1.1").contains(schemaVersion)) {
+          String message = "Unsupported or missing schemaVersion in " + root.relativize(file);
+          if (strict) errors.add(message);
+          else warnings.add(message);
+        }
+      } catch (IOException e) {
+        errors.add("Cannot read " + file + ": " + e.getMessage());
+      }
+    }
+  }
+
+  private String schemaVersion(Path file) throws IOException {
+    for (String line : Files.readAllLines(file)) {
+      String trimmed = line.trim();
+      if (trimmed.startsWith("schemaVersion:")) {
+        return trimmed
+            .substring("schemaVersion:".length())
+            .trim()
+            .replaceAll("^['\"]|['\"]$", "");
+      }
+    }
+    return null;
+  }
+
+  private List<Spec> specs(Path root) throws IOException {
+    Path dir = root.resolve(".archcontext/specs");
+    if (!Files.isDirectory(dir)) return List.of();
+    List<Spec> specs = new ArrayList<>();
+    try (var paths = Files.list(dir)) {
+      for (Path path :
+          paths.filter(p -> p.getFileName().toString().endsWith(".yaml")).sorted().toList()) {
+        var doc = new dev.archcontext.yaml.YamlMapper().read(path);
+        if (doc.spec != null) specs.add(doc.spec);
+      }
+    }
+    return specs;
+  }
+
+  private Set<String> adrIds(Path root) throws IOException {
+    Path dir = root.resolve(".archcontext/adrs");
+    if (!Files.isDirectory(dir)) return Set.of();
+    Set<String> ids = new LinkedHashSet<>();
+    try (var paths = Files.list(dir)) {
+      for (Path path :
+          paths.filter(p -> p.getFileName().toString().endsWith(".yaml")).sorted().toList()) {
+        var doc = new dev.archcontext.yaml.YamlMapper().read(path);
+        if (doc.adr != null) ids.add(doc.adr.id());
+      }
+    }
+    return ids;
+  }
+
+  private static List<String> distinct(List<String> values) {
+    return new ArrayList<>(new LinkedHashSet<>(values));
   }
 
   private static boolean blank(String value) {

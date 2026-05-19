@@ -87,6 +87,147 @@ class YamlWorkspaceWriterTest {
   }
 
   @Test
+  void upsertSpecAcceptanceCriterionAddsCriterion() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
+
+    WriteResult result =
+        writer.upsertSpecAcceptanceCriterion(
+            "SPEC-001", new AcceptanceCriterion("AC-001", "Remaining items stay active."), false);
+
+    assertTrue(result.changed());
+    Spec spec = yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec;
+    assertEquals("AC-001", spec.acceptanceCriteria().getFirst().id());
+  }
+
+  @Test
+  void upsertSpecAcceptanceCriterionUpdatesById() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
+    writer.upsertSpecAcceptanceCriterion(
+        "SPEC-001", new AcceptanceCriterion("AC-001", "Old description."), false);
+
+    WriteResult result =
+        writer.upsertSpecAcceptanceCriterion(
+            "SPEC-001", new AcceptanceCriterion("AC-001", "New description."), false);
+
+    assertTrue(result.changed());
+    Spec spec = yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec;
+    assertEquals(1, spec.acceptanceCriteria().size());
+    assertEquals("New description.", spec.acceptanceCriteria().getFirst().description());
+  }
+
+  @Test
+  void addSpecOutOfScopeItemAddsItem() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
+
+    WriteResult result =
+        writer.addSpecOutOfScopeItem("SPEC-001", new OutOfScopeItem("Loyalty refunds."), false);
+
+    assertTrue(result.changed());
+    Spec spec = yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec;
+    assertEquals("Loyalty refunds.", spec.outOfScope().getLast().description());
+  }
+
+  @Test
+  void duplicateOutOfScopeItemDoesNotCreateDuplication() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
+    writer.addSpecOutOfScopeItem("SPEC-001", new OutOfScopeItem("Loyalty refunds."), false);
+
+    WriteResult result =
+        writer.addSpecOutOfScopeItem("SPEC-001", new OutOfScopeItem("loyalty refunds."), false);
+
+    assertFalse(result.changed());
+    Spec spec = yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec;
+    assertEquals(2, spec.outOfScope().size());
+  }
+
+  @Test
+  void upsertSpecConstraintAddsStructuredConstraint() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
+
+    WriteResult result =
+        writer.upsertSpecConstraint(
+            "SPEC-001", new Constraint("CON-002", "Payments", "Do not access payment DB."), false);
+
+    assertTrue(result.changed());
+    Spec spec = yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec;
+    assertEquals("CON-002", spec.structuredConstraints().getLast().id());
+    assertTrue(spec.constraints().isEmpty());
+  }
+
+  @Test
+  void upsertSpecConstraintUpdatesById() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
+    writer.upsertSpecConstraint(
+        "SPEC-001", new Constraint("CON-002", "Payments", "Old."), false);
+
+    WriteResult result =
+        writer.upsertSpecConstraint(
+            "SPEC-001", new Constraint("CON-002", "Payments", "New."), false);
+
+    assertTrue(result.changed());
+    Spec spec = yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec;
+    assertEquals(2, spec.structuredConstraints().size());
+    assertEquals("New.", spec.structuredConstraints().getLast().description());
+  }
+
+  @Test
+  void validateWorkspaceDetectsUnknownRepositoryReference() throws Exception {
+    writer.createSpec(spec("SPEC-001", List.of("unknown-api")), true);
+    Path specPath = root.resolve(".archcontext/specs/spec-001.yaml");
+    Files.createDirectories(specPath.getParent());
+    YamlMapper mapper = new YamlMapper();
+    var doc = new dev.archcontext.yaml.YamlDocuments();
+    doc.schemaVersion = "1.1";
+    doc.spec = spec("SPEC-001", List.of("unknown-api"));
+    mapper.write(specPath, doc);
+
+    WriteValidation result = writer.validateWorkspace(false);
+
+    assertTrue(result.errors().stream().anyMatch(e -> e.contains("unknown-api")));
+  }
+
+  @Test
+  void validateWorkspaceWarnsWhenActiveSpecHasNoAcceptanceCriteria() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    Spec active =
+        new Spec(
+            "SPEC-002",
+            "Active spec",
+            "active",
+            "team",
+            "Problem",
+            "Goal",
+            List.of("booking-api"),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            null);
+    Path specPath = root.resolve(".archcontext/specs/spec-002.yaml");
+    Files.createDirectories(specPath.getParent());
+    var doc = new dev.archcontext.yaml.YamlDocuments();
+    doc.schemaVersion = "1.1";
+    doc.spec = active;
+    yaml.write(specPath, doc);
+
+    WriteValidation result = writer.validateWorkspace(false);
+
+    assertTrue(result.warnings().stream().anyMatch(w -> w.contains("no acceptance criteria")));
+  }
+
+  @Test
   void dryRunDoesNotModifyFiles() throws Exception {
     String before = Files.readString(root.resolve(".archcontext/repositories.yaml"));
 
@@ -96,6 +237,21 @@ class YamlWorkspaceWriterTest {
     assertTrue(result.dryRun());
     assertEquals(before, Files.readString(root.resolve(".archcontext/repositories.yaml")));
     assertFalse(Files.exists(root.resolve(".archcontext/archcontext.db")));
+  }
+
+  @Test
+  void dryRunSpecEnrichmentDoesNotModifyFiles() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
+    Path specPath = root.resolve(".archcontext/specs/spec-001.yaml");
+    String before = Files.readString(specPath);
+
+    WriteResult result =
+        writer.upsertSpecAcceptanceCriterion(
+            "SPEC-001", new AcceptanceCriterion("AC-001", "Preview only."), true);
+
+    assertTrue(result.changed());
+    assertEquals(before, Files.readString(specPath));
   }
 
   @Test
@@ -116,6 +272,23 @@ class YamlWorkspaceWriterTest {
         ResultSet rs = c.createStatement().executeQuery("SELECT count(*) FROM repositories")) {
       assertTrue(rs.next());
       assertEquals(1, rs.getInt(1));
+    }
+  }
+
+  @Test
+  void importIndexRunsAfterSuccessfulSpecEnrichment() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
+
+    writer.upsertSpecAcceptanceCriterion(
+        "SPEC-001", new AcceptanceCriterion("AC-001", "Remaining items stay active."), false);
+
+    try (Connection c = new Database(root.resolve(".archcontext/archcontext.db")).connect();
+        ResultSet rs =
+            c.createStatement()
+                .executeQuery("SELECT content FROM documents WHERE document_key='SPEC-001'")) {
+      assertTrue(rs.next());
+      assertTrue(rs.getString(1).contains("Remaining items stay active"));
     }
   }
 

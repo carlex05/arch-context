@@ -194,6 +194,12 @@ Current write tools:
 - `upsert_repository`: create or update one repository in `.archcontext/repositories.yaml`.
 - `create_spec`: create one new spec under `.archcontext/specs/*.yaml`.
 - `upsert_spec_requirement`: add or update one functional or non-functional requirement in an existing spec.
+- `upsert_spec_acceptance_criterion`: add or update one acceptance criterion in an existing spec.
+- `upsert_spec_constraint`: add or update one structured constraint in an existing spec without removing legacy constraints.
+- `add_spec_out_of_scope_item`: add an out-of-scope item while avoiding duplicate descriptions.
+- `validate_workspace`: validate repository references, component references, active spec readiness, related ADRs, and schema versions without writing files.
+
+For Spec-Driven Development, acceptance criteria, constraints, and out-of-scope items are central. They make the implementation boundary explicit for both humans and agents: what must be true, what architectural rules must be respected, and what must not be implemented in the current change.
 
 Write tools are intentionally constrained:
 
@@ -224,14 +230,61 @@ Dry-run example:
 }
 ```
 
+Spec enrichment examples:
+
+```json
+{
+  "name": "upsert_spec_acceptance_criterion",
+  "arguments": {
+    "specId": "SPEC-002",
+    "id": "AC-001",
+    "description": "Every cancellation action is recorded with actor, timestamp, booking id, and affected item ids.",
+    "dryRun": true
+  }
+}
+```
+
+```json
+{
+  "name": "upsert_spec_constraint",
+  "arguments": {
+    "specId": "SPEC-002",
+    "id": "CON-001",
+    "title": "Payment ownership",
+    "description": "Booking services must not read or write payment-service tables directly."
+  }
+}
+```
+
+```json
+{
+  "name": "add_spec_out_of_scope_item",
+  "arguments": {
+    "specId": "SPEC-002",
+    "description": "Changing refund calculation rules is out of scope for this spec."
+  }
+}
+```
+
+```json
+{
+  "name": "validate_workspace",
+  "arguments": {
+    "strict": false
+  }
+}
+```
+
 Example agent workflow:
 
-1. Create a spec with `dryRun: true`.
-2. Review the proposed change and validation result.
-3. Create the spec without `dryRun`.
-4. Add requirements with `upsert_spec_requirement`.
-5. Let ArchContext re-import/index automatically after successful writes.
-6. Review the Git diff before committing shared `.archcontext` files.
+1. Create a spec with `create_spec` and `dryRun: true`.
+2. Create the spec without `dryRun`.
+3. Add requirements with `upsert_spec_requirement`.
+4. Add acceptance criteria with `upsert_spec_acceptance_criterion`.
+5. Add constraints with `upsert_spec_constraint`.
+6. Add boundaries with `add_spec_out_of_scope_item`.
+7. Run `validate_workspace`.
+8. Review the Git diff before committing shared `.archcontext` files.
 
 ## MCP surface
 
@@ -258,6 +311,10 @@ Tools:
 - `upsert_repository`
 - `create_spec`
 - `upsert_spec_requirement`
+- `upsert_spec_acceptance_criterion`
+- `upsert_spec_constraint`
+- `add_spec_out_of_scope_item`
+- `validate_workspace`
 
 Prompts:
 

@@ -58,7 +58,11 @@ class ArchContextMcpServerTest {
             "list_active_specs",
             "upsert_repository",
             "create_spec",
-            "upsert_spec_requirement"),
+            "upsert_spec_requirement",
+            "upsert_spec_acceptance_criterion",
+            "add_spec_out_of_scope_item",
+            "upsert_spec_constraint",
+            "validate_workspace"),
         tools.keySet());
 
     assertStrictNoArgSchema(tools.get("get_solution_context"));
@@ -86,6 +90,19 @@ class ArchContextMcpServerTest {
     assertRequired(tools.get("upsert_spec_requirement"), "requirementType");
     assertRequired(tools.get("upsert_spec_requirement"), "id");
     assertRequired(tools.get("upsert_spec_requirement"), "description");
+    assertRequired(tools.get("upsert_spec_acceptance_criterion"), "specId");
+    assertRequired(tools.get("upsert_spec_acceptance_criterion"), "id");
+    assertRequired(tools.get("upsert_spec_acceptance_criterion"), "description");
+    assertProperty(tools.get("upsert_spec_acceptance_criterion"), "dryRun");
+    assertRequired(tools.get("add_spec_out_of_scope_item"), "specId");
+    assertRequired(tools.get("add_spec_out_of_scope_item"), "description");
+    assertProperty(tools.get("add_spec_out_of_scope_item"), "dryRun");
+    assertRequired(tools.get("upsert_spec_constraint"), "specId");
+    assertRequired(tools.get("upsert_spec_constraint"), "id");
+    assertRequired(tools.get("upsert_spec_constraint"), "description");
+    assertProperty(tools.get("upsert_spec_constraint"), "title");
+    assertProperty(tools.get("upsert_spec_constraint"), "dryRun");
+    assertProperty(tools.get("validate_workspace"), "strict");
   }
 
   @Test

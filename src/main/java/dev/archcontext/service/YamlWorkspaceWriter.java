@@ -90,42 +90,84 @@ public class YamlWorkspaceWriter {
 
   public WriteResult upsertSpecRequirement(
       String specId, String requirementType, Requirement requirement, boolean dryRun) {
+    return updateSpec(
+        specId,
+        dryRun,
+        "Requirement was not written.",
+        spec -> updateRequirement(spec, requirementType, requirement),
+        "Upserted " + requirementType + " requirement " + requirement.id() + ".");
+  }
+
+  public WriteResult upsertSpecAcceptanceCriterion(
+      String specId, AcceptanceCriterion acceptanceCriterion, boolean dryRun) {
+    return updateSpec(
+        specId,
+        dryRun,
+        "Acceptance criterion was not written.",
+        spec -> updateAcceptanceCriterion(spec, acceptanceCriterion),
+        "Upserted acceptance criterion " + acceptanceCriterion.id() + ".");
+  }
+
+  public WriteResult addSpecOutOfScopeItem(String specId, OutOfScopeItem item, boolean dryRun) {
+    return updateSpec(
+        specId,
+        dryRun,
+        "Out-of-scope item was not written.",
+        spec -> addOutOfScopeItem(spec, item),
+        "Added out-of-scope item to " + specId + ".");
+  }
+
+  public WriteResult upsertSpecConstraint(String specId, Constraint constraint, boolean dryRun) {
+    return updateSpec(
+        specId,
+        dryRun,
+        "Constraint was not written.",
+        spec -> updateStructuredConstraint(spec, constraint),
+        "Upserted structured constraint " + constraint.id() + ".");
+  }
+
+  public WriteValidation validateWorkspace(boolean strict) {
+    return validator.validateWorkspace(root, strict);
+  }
+
+  public void validateKnownWriteTarget(Path target) {
+    validator.validateKnownWriteTarget(root, target);
+  }
+
+  private WriteResult updateSpec(
+      String specId,
+      boolean dryRun,
+      String failureSummary,
+      SpecUpdater updater,
+      String successSummary) {
     try {
       SpecFile specFile = findSpec(specId);
       if (specFile == null) {
         WriteValidation validation =
             new WriteValidation(List.of("Unknown specId: " + specId), List.of());
-        return result(false, dryRun, specsDir(), "Requirement was not written.", validation, null);
+        return result(false, dryRun, specsDir(), failureSummary, validation, null);
       }
       validator.validateKnownWriteTarget(root, specFile.path());
-      Spec updated = updateRequirement(specFile.document().spec, requirementType, requirement);
+      Spec original = specFile.document().spec;
+      Spec updated = updater.update(original);
       WriteValidation validation = validator.validateSpec(root, updated);
       if (!validation.errors().isEmpty()) {
-        return result(
-            false, dryRun, specFile.path(), "Requirement was not written.", validation, updated);
+        return result(false, dryRun, specFile.path(), failureSummary, validation, updated);
       }
 
+      boolean changed = !updated.equals(original);
       specFile.document().schemaVersion = "1.1";
       specFile.document().spec = updated;
-      if (!dryRun) {
+      if (changed && !dryRun) {
         writeAtomically(specFile.path(), specFile.document());
         reindex();
       }
-      return result(
-          true,
-          dryRun,
-          specFile.path(),
-          "Upserted " + requirementType + " requirement " + requirement.id() + ".",
-          validation,
-          updated);
+      String summary = changed ? successSummary : "No changes for spec " + specId + ".";
+      return result(changed, dryRun, specFile.path(), summary, validation, updated);
     } catch (IOException | IllegalArgumentException e) {
       WriteValidation validation = new WriteValidation(List.of(e.getMessage()), List.of());
-      return result(false, dryRun, specsDir(), "Requirement was not written.", validation, null);
+      return result(false, dryRun, specsDir(), failureSummary, validation, null);
     }
-  }
-
-  public void validateKnownWriteTarget(Path target) {
-    validator.validateKnownWriteTarget(root, target);
   }
 
   private Spec updateRequirement(Spec spec, String requirementType, Requirement requirement) {
@@ -137,7 +179,7 @@ public class YamlWorkspaceWriter {
     List<Requirement> target = "functional".equals(requirementType) ? functional : nonFunctional;
     target.removeIf(r -> r.id().equals(requirement.id()));
     target.add(requirement);
-    return new Spec(
+    return spec(
         spec.id(),
         spec.title(),
         spec.status(),
@@ -156,6 +198,122 @@ public class YamlWorkspaceWriter {
         nvl(spec.openQuestions()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
+  }
+
+  private Spec updateAcceptanceCriterion(Spec spec, AcceptanceCriterion acceptanceCriterion) {
+    List<AcceptanceCriterion> criteria = new ArrayList<>(nvl(spec.acceptanceCriteria()));
+    criteria.removeIf(c -> c.id().equals(acceptanceCriterion.id()));
+    criteria.add(acceptanceCriterion);
+    return spec(
+        spec.id(),
+        spec.title(),
+        spec.status(),
+        spec.owner(),
+        spec.problem(),
+        spec.businessGoal(),
+        nvl(spec.affectedRepositories()),
+        nvl(spec.affectedBoundedContexts()),
+        nvl(spec.functionalRequirements()),
+        nvl(spec.nonFunctionalRequirements()),
+        criteria,
+        nvl(spec.constraints()),
+        nvl(spec.structuredConstraints()),
+        nvl(spec.affectedComponents()),
+        nvl(spec.outOfScope()),
+        nvl(spec.openQuestions()),
+        nvl(spec.relatedAdrs()),
+        spec.sourcePath());
+  }
+
+  private Spec addOutOfScopeItem(Spec spec, OutOfScopeItem item) {
+    List<OutOfScopeItem> items = new ArrayList<>(nvl(spec.outOfScope()));
+    boolean exists =
+        items.stream().anyMatch(i -> i.description().equalsIgnoreCase(item.description()));
+    if (!exists) items.add(item);
+    return spec(
+        spec.id(),
+        spec.title(),
+        spec.status(),
+        spec.owner(),
+        spec.problem(),
+        spec.businessGoal(),
+        nvl(spec.affectedRepositories()),
+        nvl(spec.affectedBoundedContexts()),
+        nvl(spec.functionalRequirements()),
+        nvl(spec.nonFunctionalRequirements()),
+        nvl(spec.acceptanceCriteria()),
+        nvl(spec.constraints()),
+        nvl(spec.structuredConstraints()),
+        nvl(spec.affectedComponents()),
+        items,
+        nvl(spec.openQuestions()),
+        nvl(spec.relatedAdrs()),
+        spec.sourcePath());
+  }
+
+  private Spec updateStructuredConstraint(Spec spec, Constraint constraint) {
+    List<Constraint> constraints = new ArrayList<>(nvl(spec.structuredConstraints()));
+    constraints.removeIf(c -> c.id().equals(constraint.id()));
+    constraints.add(constraint);
+    return spec(
+        spec.id(),
+        spec.title(),
+        spec.status(),
+        spec.owner(),
+        spec.problem(),
+        spec.businessGoal(),
+        nvl(spec.affectedRepositories()),
+        nvl(spec.affectedBoundedContexts()),
+        nvl(spec.functionalRequirements()),
+        nvl(spec.nonFunctionalRequirements()),
+        nvl(spec.acceptanceCriteria()),
+        nvl(spec.constraints()),
+        constraints,
+        nvl(spec.affectedComponents()),
+        nvl(spec.outOfScope()),
+        nvl(spec.openQuestions()),
+        nvl(spec.relatedAdrs()),
+        spec.sourcePath());
+  }
+
+  private Spec spec(
+      String id,
+      String title,
+      String status,
+      String owner,
+      String problem,
+      String businessGoal,
+      List<String> affectedRepositories,
+      List<String> affectedBoundedContexts,
+      List<Requirement> functionalRequirements,
+      List<Requirement> nonFunctionalRequirements,
+      List<AcceptanceCriterion> acceptanceCriteria,
+      List<String> constraints,
+      List<Constraint> structuredConstraints,
+      List<ComponentRef> affectedComponents,
+      List<OutOfScopeItem> outOfScope,
+      List<OpenQuestion> openQuestions,
+      List<String> relatedAdrs,
+      String sourcePath) {
+    return new Spec(
+        id,
+        title,
+        status,
+        owner,
+        problem,
+        businessGoal,
+        affectedRepositories,
+        affectedBoundedContexts,
+        functionalRequirements,
+        nonFunctionalRequirements,
+        acceptanceCriteria,
+        constraints,
+        structuredConstraints,
+        affectedComponents,
+        outOfScope,
+        openQuestions,
+        relatedAdrs,
+        sourcePath);
   }
 
   private SpecFile findSpec(String specId) throws IOException {
@@ -239,4 +397,9 @@ public class YamlWorkspaceWriter {
   }
 
   private record SpecFile(Path path, YamlDocuments document) {}
+
+  @FunctionalInterface
+  private interface SpecUpdater {
+    Spec update(Spec spec);
+  }
 }
