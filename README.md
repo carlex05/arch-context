@@ -15,7 +15,7 @@ Modern software work often spans multiple repositories. Agents need more than th
 - **Guideline**: rules that apply by language and repository type.
 - **YAML source of truth**: `.archcontext/*.yaml` files are human-editable and versionable.
 - **SQLite local index**: `.archcontext/archcontext.db` is a local cache/search index rebuilt by `archcontext import`.
-- **MCP stdio server**: `archcontext mcp` exposes resources, tools, and prompts over standard input/output. stdout is reserved for MCP protocol messages in MCP mode.
+- **MCP stdio server**: `archcontext mcp` exposes resources, tools, and prompts through the official Java MCP SDK stdio transport. stdout is reserved for MCP protocol messages in MCP mode.
 
 ArchContext explicitly supports one solution/workspace composed of multiple source code repositories.
 
@@ -36,7 +36,7 @@ java -jar target/archcontext.jar repo add ../booking-api --id booking-api --name
 java -jar target/archcontext.jar repo list
 java -jar target/archcontext.jar import
 java -jar target/archcontext.jar doctor
-java -jar target/archcontext.jar mcp
+java -jar target/archcontext.jar mcp --root /path/to/workspace
 ```
 
 `repositories.yaml` is shared and versionable. `local.yaml` is developer-specific and ignored by `.archcontext/.gitignore`; it can override repository paths for each developer.
@@ -51,12 +51,92 @@ java -jar target/archcontext.jar mcp
       "args": [
         "-jar",
         "/path/to/archcontext.jar",
-        "mcp"
+        "mcp",
+        "--root",
+        "/path/to/workspace"
       ]
     }
   }
 }
 ```
+
+Run `archcontext import` in that workspace before starting the MCP server so `.archcontext/archcontext.db` exists.
+
+## Testing with a real MCP client
+
+The repository includes a realistic sample workspace at `examples/sample-workspace`.
+
+Build the executable JAR:
+
+```bash
+mvn -q clean package
+```
+
+Import the sample context:
+
+```bash
+java -jar target/archcontext.jar import --root examples/sample-workspace
+java -jar target/archcontext.jar doctor --root examples/sample-workspace
+```
+
+Configure your MCP client with the generated JAR and the sample workspace:
+
+```json
+{
+  "mcpServers": {
+    "archcontext": {
+      "command": "java",
+      "args": [
+        "-jar",
+        "/absolute/path/to/arch-context/target/archcontext.jar",
+        "mcp",
+        "--root",
+        "/absolute/path/to/arch-context/examples/sample-workspace"
+      ]
+    }
+  }
+}
+```
+
+Then ask the client to call these tools:
+
+```json
+{
+  "name": "get_solution_context",
+  "arguments": {}
+}
+```
+
+```json
+{
+  "name": "get_repository_context",
+  "arguments": {
+    "repositoryId": "booking-api"
+  }
+}
+```
+
+```json
+{
+  "name": "get_implementation_context_for_spec",
+  "arguments": {
+    "specId": "SPEC-001",
+    "repositoryId": "booking-api"
+  }
+}
+```
+
+You can also run the local smoke test:
+
+```bash
+scripts/smoke-test-mcp.sh
+```
+
+The smoke test validates packaging, sample import, `doctor`, and a minimal stdio initialize handshake. It does not replace testing with real clients such as Claude Desktop, Cursor, Claude Code, or another MCP-compatible agent.
+
+## MCP compatibility
+
+ArchContext uses the official Java MCP SDK. The currently integrated SDK version may negotiate an older protocol version than the latest published MCP specification. Verify compatibility with the MCP client you plan to use.
 
 ## MCP surface
 
@@ -120,3 +200,5 @@ workspace/
 ## Security and runtime model
 
 ArchContext is local-only. It does not expose shell execution, does not send data to external services, does not inspect Git history, and does not require Docker or a remote database.
+
+In MCP mode, diagnostics and logs must go to stderr or a file. stdout is reserved exclusively for MCP protocol messages so stdio clients can parse the stream safely.

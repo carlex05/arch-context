@@ -14,7 +14,15 @@ public class Database {
   }
 
   public Connection connect() throws SQLException {
-    return DriverManager.getConnection("jdbc:sqlite:" + dbPath.toAbsolutePath());
+    Path absolutePath = dbPath.toAbsolutePath().normalize();
+    Path parent = absolutePath.getParent();
+    if (parent != null && !Files.isDirectory(parent)) {
+      throw new SQLException(
+          "SQLite parent directory does not exist: "
+              + parent
+              + ". Check the ArchContext workspace root or run archcontext init/import.");
+    }
+    return DriverManager.getConnection("jdbc:sqlite:" + absolutePath);
   }
 
   public void migrate() {

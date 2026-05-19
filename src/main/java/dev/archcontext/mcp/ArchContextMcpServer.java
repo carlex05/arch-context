@@ -1,204 +1,331 @@
 package dev.archcontext.mcp;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.archcontext.service.*;
-import java.io.*;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
-import java.util.*;
+import dev.archcontext.service.McpContextService;
+import dev.archcontext.util.Json;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.jackson3.JacksonMcpJsonMapperSupplier;
+import io.modelcontextprotocol.server.McpServer;
+import io.modelcontextprotocol.server.McpServerFeatures;
+import io.modelcontextprotocol.server.McpSyncServer;
+import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
+import io.modelcontextprotocol.spec.McpSchema;
+import java.io.FilterInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 
 public class ArchContextMcpServer {
+  private static final String JSON_MIME_TYPE = "application/json";
+
   private final McpContextService svc;
-  private final ObjectMapper json = new ObjectMapper().findAndRegisterModules();
+  private final McpJsonMapper jsonMapper;
 
   public ArchContextMcpServer(Path root) {
-    svc = new McpContextService(root);
+    this(root, new JacksonMcpJsonMapperSupplier().get());
   }
 
-  public void run() throws IOException {
-    BufferedReader in =
-        new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
-    BufferedWriter out =
-        new BufferedWriter(new OutputStreamWriter(System.out, StandardCharsets.UTF_8));
-    String line;
-    while ((line = in.readLine()) != null) {
-      if (line.isBlank()) continue;
-      Map<String, Object> req = json.readValue(line, new TypeReference<>() {});
-      Object id = req.get("id");
-      String method = (String) req.get("method");
-      if (id == null) {
-        continue;
-      }
-      Object result;
-      try {
-        result = handle(method, map(req.get("params")));
-        write(out, Map.of("jsonrpc", "2.0", "id", id, "result", result));
-      } catch (Exception e) {
-        write(
-            out,
-            Map.of(
-                "jsonrpc",
-                "2.0",
-                "id",
-                id,
-                "error",
-                Map.of(
-                    "code",
-                    -32603,
-                    "message",
-                    e.getMessage() == null ? e.toString() : e.getMessage())));
-      }
+  ArchContextMcpServer(Path root, McpJsonMapper jsonMapper) {
+    this.svc = new McpContextService(root);
+    this.jsonMapper = jsonMapper;
+  }
+
+  public void run() {
+    run(System.in, System.out);
+  }
+
+  void run(InputStream in, OutputStream out) {
+    CloseAwareInputStream closeAwareIn = new CloseAwareInputStream(in);
+    McpSyncServer server = createServer(closeAwareIn, out);
+    try {
+      closeAwareIn.awaitClosed();
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    } finally {
+      server.closeGracefully();
     }
   }
 
-  private Object handle(String method, Map<String, Object> p) {
-    return switch (method) {
-      case "initialize" ->
-          Map.of(
-              "protocolVersion",
-              "2025-06-18",
-              "serverInfo",
-              Map.of("name", "ArchContext", "version", "0.1.0"),
-              "capabilities",
-              Map.of("resources", Map.of(), "tools", Map.of(), "prompts", Map.of()));
-      case "resources/list" -> Map.of("resources", resources());
-      case "resources/read" -> resourceRead((String) p.get("uri"));
-      case "tools/list" -> Map.of("tools", tools());
-      case "tools/call" -> toolCall((String) p.get("name"), map(p.get("arguments")));
-      case "prompts/list" -> Map.of("prompts", prompts());
-      case "prompts/get" -> promptGet((String) p.get("name"), map(p.get("arguments")));
-      default -> throw new IllegalArgumentException("Unsupported MCP method: " + method);
-    };
+  McpSyncServer createServer(InputStream in, OutputStream out) {
+    StdioServerTransportProvider transportProvider =
+        new StdioServerTransportProvider(jsonMapper, in, out);
+    return McpServer.sync(transportProvider)
+        .serverInfo("ArchContext", "0.1.0")
+        .capabilities(
+            McpSchema.ServerCapabilities.builder()
+                .resources(false, false)
+                .tools(false)
+                .prompts(false)
+                .build())
+        .resources(resourceSpecifications())
+        .resourceTemplates(resourceTemplateSpecifications())
+        .tools(toolSpecifications())
+        .prompts(promptSpecifications())
+        .build();
   }
 
-  private Object resourceRead(String uri) {
-    return Map.of(
-        "contents",
-        List.of(Map.of("uri", uri, "mimeType", "application/json", "text", svc.readResource(uri))));
-  }
-
-  private Object toolCall(String name, Map<String, Object> a) {
-    Object data =
-        switch (name) {
-          case "get_solution_context" -> svc.getSolutionContext();
-          case "get_repository_context" -> svc.getRepositoryContext(str(a, "repositoryId"));
-          case "search_context" -> svc.searchContext(str(a, "query"), list(a.get("types")));
-          case "get_spec_context" -> svc.getSpecContext(str(a, "specId"));
-          case "get_implementation_context_for_spec" ->
-              svc.getImplementationContextForSpec(str(a, "specId"), (String) a.get("repositoryId"));
-          case "validate_spec_completeness" -> svc.validateSpecCompleteness(str(a, "specId"));
-          case "list_active_specs" -> svc.listActiveSpecs();
-          default -> throw new IllegalArgumentException("Unknown tool: " + name);
-        };
-    return Map.of(
-        "content", List.of(Map.of("type", "text", "text", dev.archcontext.util.Json.write(data))));
-  }
-
-  private Object promptGet(String name, Map<String, Object> a) {
-    String text =
-        switch (name) {
-          case "create_spec" ->
-              "Create a new ArchContext spec YAML with schemaVersion, spec metadata, requirements,"
-                  + " acceptance criteria, constraints, and related ADRs. Use concise IDs and cite"
-                  + " affected repositories.";
-          case "review_spec" ->
-              "Review the specified ArchContext spec for completeness, ambiguity, missing"
-                  + " acceptance criteria, architectural impact, repository impact, constraints,"
-                  + " and related ADRs.";
-          case "plan_implementation_from_spec" ->
-              "Build an implementation plan from the spec and ArchContext repository/ADR/guideline"
-                  + " context. Keep work scoped by repository and acceptance criterion.";
-          case "validate_implementation_against_spec" ->
-              "Validate the implementation against the spec acceptance criteria, constraints,"
-                  + " related ADRs, and applicable guidelines. Report gaps and risks.";
-          case "suggest_adr" ->
-              "Determine whether the spec or implementation plan introduces a decision that should"
-                  + " be documented as an ADR. If yes, draft an ADR outline.";
-          default -> throw new IllegalArgumentException("Unknown prompt: " + name);
-        };
-    return Map.of(
-        "description",
-        name,
-        "messages",
-        List.of(Map.of("role", "user", "content", Map.of("type", "text", "text", text))));
-  }
-
-  private List<Map<String, Object>> resources() {
+  List<McpServerFeatures.SyncResourceSpecification> resourceSpecifications() {
     return List.of(
-        res("archcontext://solution", "Solution"),
-        res("archcontext://repositories", "Repositories"),
-        res("archcontext://specs", "Specs"),
-        res("archcontext://adrs", "ADRs"),
-        res("archcontext://guidelines", "Guidelines"));
+        resource("archcontext://solution", "Solution"),
+        resource("archcontext://repositories", "Repositories"),
+        resource("archcontext://specs", "Specs"),
+        resource("archcontext://adrs", "ADRs"),
+        resource("archcontext://guidelines", "Guidelines"));
   }
 
-  private Map<String, Object> res(String uri, String name) {
-    return Map.of("uri", uri, "name", name, "mimeType", "application/json");
-  }
-
-  private List<Map<String, Object>> tools() {
+  List<McpServerFeatures.SyncResourceTemplateSpecification> resourceTemplateSpecifications() {
     return List.of(
-        tool("get_solution_context", Map.of()),
-        tool("get_repository_context", schema("repositoryId")),
-        tool("search_context", schema("query")),
-        tool("get_spec_context", schema("specId")),
-        tool("get_implementation_context_for_spec", schema("specId")),
-        tool("validate_spec_completeness", schema("specId")),
-        tool("list_active_specs", Map.of()));
+        resourceTemplate("archcontext://repositories/{repositoryId}", "Repository"),
+        resourceTemplate("archcontext://specs/{specId}", "Spec"),
+        resourceTemplate("archcontext://adrs/{adrId}", "ADR"));
   }
 
-  private Map<String, Object> tool(String n, Map<String, Object> schema) {
-    return Map.of(
-        "name",
-        n,
-        "description",
-        n.replace('_', ' '),
-        "inputSchema",
-        schema.isEmpty() ? Map.of("type", "object", "properties", Map.of()) : schema);
+  List<McpServerFeatures.SyncToolSpecification> toolSpecifications() {
+    return List.of(
+        tool(
+            "get_solution_context",
+            "get solution context",
+            strictObjectSchema(Map.of(), List.of()),
+            args -> svc.getSolutionContext()),
+        tool(
+            "get_repository_context",
+            "get repository context",
+            strictObjectSchema(
+                Map.of("repositoryId", stringProperty("Repository id")), "repositoryId"),
+            args -> svc.getRepositoryContext(requiredString(args, "repositoryId"))),
+        tool(
+            "search_context",
+            "search context",
+            strictObjectSchema(
+                Map.of(
+                    "query",
+                    stringProperty("Search query"),
+                    "types",
+                    Map.of(
+                        "type",
+                        "array",
+                        "items",
+                        Map.of("type", "string"),
+                        "description",
+                        "Optional document types to search")),
+                "query"),
+            args ->
+                svc.searchContext(requiredString(args, "query"), stringList(args.get("types")))),
+        tool(
+            "get_spec_context",
+            "get spec context",
+            strictObjectSchema(Map.of("specId", stringProperty("Spec id")), "specId"),
+            args -> svc.getSpecContext(requiredString(args, "specId"))),
+        tool(
+            "get_implementation_context_for_spec",
+            "get implementation context for spec",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "repositoryId",
+                    stringProperty("Optional repository id")),
+                "specId"),
+            args ->
+                svc.getImplementationContextForSpec(
+                    requiredString(args, "specId"), optionalString(args, "repositoryId"))),
+        tool(
+            "validate_spec_completeness",
+            "validate spec completeness",
+            strictObjectSchema(Map.of("specId", stringProperty("Spec id")), "specId"),
+            args -> svc.validateSpecCompleteness(requiredString(args, "specId"))),
+        tool(
+            "list_active_specs",
+            "list active specs",
+            strictObjectSchema(Map.of(), List.of()),
+            args -> svc.listActiveSpecs()));
   }
 
-  private Map<String, Object> schema(String required) {
+  List<McpServerFeatures.SyncPromptSpecification> promptSpecifications() {
+    return List.of(
+        prompt(
+            "create_spec",
+            "create spec",
+            "Create a new ArchContext spec YAML with schemaVersion, spec metadata, requirements,"
+                + " acceptance criteria, constraints, and related ADRs. Use concise IDs and cite"
+                + " affected repositories."),
+        prompt(
+            "review_spec",
+            "review spec",
+            "Review the specified ArchContext spec for completeness, ambiguity, missing"
+                + " acceptance criteria, architectural impact, repository impact, constraints,"
+                + " and related ADRs."),
+        prompt(
+            "plan_implementation_from_spec",
+            "plan implementation from spec",
+            "Build an implementation plan from the spec and ArchContext repository/ADR/guideline"
+                + " context. Keep work scoped by repository and acceptance criterion."),
+        prompt(
+            "validate_implementation_against_spec",
+            "validate implementation against spec",
+            "Validate the implementation against the spec acceptance criteria, constraints,"
+                + " related ADRs, and applicable guidelines. Report gaps and risks."),
+        prompt(
+            "suggest_adr",
+            "suggest adr",
+            "Determine whether the spec or implementation plan introduces a decision that should"
+                + " be documented as an ADR. If yes, draft an ADR outline."));
+  }
+
+  private McpServerFeatures.SyncResourceSpecification resource(String uri, String name) {
+    McpSchema.Resource resource =
+        McpSchema.Resource.builder().uri(uri).name(name).mimeType(JSON_MIME_TYPE).build();
+    return new McpServerFeatures.SyncResourceSpecification(resource, this::readResource);
+  }
+
+  private McpServerFeatures.SyncResourceTemplateSpecification resourceTemplate(
+      String uriTemplate, String name) {
+    McpSchema.ResourceTemplate template =
+        McpSchema.ResourceTemplate.builder()
+            .uriTemplate(uriTemplate)
+            .name(name)
+            .mimeType(JSON_MIME_TYPE)
+            .build();
+    return new McpServerFeatures.SyncResourceTemplateSpecification(template, this::readResource);
+  }
+
+  private McpSchema.ReadResourceResult readResource(
+      Object exchange, McpSchema.ReadResourceRequest request) {
+    return new McpSchema.ReadResourceResult(
+        List.of(
+            new McpSchema.TextResourceContents(
+                request.uri(), JSON_MIME_TYPE, svc.readResource(request.uri()))));
+  }
+
+  private McpServerFeatures.SyncToolSpecification tool(
+      String name, String description, Map<String, Object> inputSchema, ToolHandler handler) {
+    McpSchema.Tool tool =
+        McpSchema.Tool.builder()
+            .name(name)
+            .description(description)
+            .inputSchema(inputSchema)
+            .outputSchema(
+                Map.of(
+                    "type",
+                    "object",
+                    "properties",
+                    Map.of("data", Map.of("description", "Structured ArchContext result"))))
+            .build();
+    return McpServerFeatures.SyncToolSpecification.builder()
+        .tool(tool)
+        .callHandler((exchange, request) -> callTool(handler, request.arguments()))
+        .build();
+  }
+
+  private McpSchema.CallToolResult callTool(ToolHandler handler, Map<String, Object> arguments) {
+    try {
+      Object data = handler.call(arguments == null ? Map.of() : arguments);
+      Object structured = Map.of("data", Json.MAPPER.convertValue(data, Object.class));
+      return McpSchema.CallToolResult.builder()
+          .content(List.of(new McpSchema.TextContent(Json.write(data))))
+          .structuredContent(structured)
+          .isError(false)
+          .build();
+    } catch (IllegalArgumentException e) {
+      return McpSchema.CallToolResult.builder()
+          .content(List.of(new McpSchema.TextContent(e.getMessage())))
+          .isError(true)
+          .build();
+    }
+  }
+
+  private McpServerFeatures.SyncPromptSpecification prompt(
+      String name, String description, String text) {
+    McpSchema.Prompt prompt = new McpSchema.Prompt(name, description, List.of());
+    return new McpServerFeatures.SyncPromptSpecification(
+        prompt,
+        (exchange, request) ->
+            new McpSchema.GetPromptResult(
+                description,
+                List.of(
+                    new McpSchema.PromptMessage(
+                        McpSchema.Role.USER, new McpSchema.TextContent(text)))));
+  }
+
+  private static Map<String, Object> strictObjectSchema(
+      Map<String, Object> properties, String... required) {
+    return strictObjectSchema(properties, List.of(required));
+  }
+
+  private static Map<String, Object> strictObjectSchema(
+      Map<String, Object> properties, List<String> required) {
     return Map.of(
         "type",
         "object",
         "properties",
-        Map.of(required, Map.of("type", "string")),
+        properties,
         "required",
-        List.of(required));
+        required,
+        "additionalProperties",
+        false);
   }
 
-  private List<Map<String, Object>> prompts() {
-    return List.of(
-            "create_spec",
-            "review_spec",
-            "plan_implementation_from_spec",
-            "validate_implementation_against_spec",
-            "suggest_adr")
-        .stream()
-        .map(n -> Map.<String, Object>of("name", n, "description", n.replace('_', ' ')))
-        .toList();
+  private static Map<String, Object> stringProperty(String description) {
+    return Map.of("type", "string", "description", description);
   }
 
-  @SuppressWarnings("unchecked")
-  private Map<String, Object> map(Object o) {
-    return o instanceof Map<?, ?> m ? (Map<String, Object>) m : Map.of();
+  private static String requiredString(Map<String, Object> args, String name) {
+    String value = optionalString(args, name);
+    if (value == null || value.isBlank()) {
+      throw new IllegalArgumentException("Missing required argument: " + name);
+    }
+    return value;
   }
 
-  @SuppressWarnings("unchecked")
-  private List<String> list(Object o) {
-    return o instanceof List<?> l ? l.stream().map(String::valueOf).toList() : List.of();
+  private static String optionalString(Map<String, Object> args, String name) {
+    Object value = args.get(name);
+    return value == null ? null : value.toString();
   }
 
-  private String str(Map<String, Object> m, String k) {
-    Object v = m.get(k);
-    if (v == null) throw new IllegalArgumentException("Missing required argument: " + k);
-    return v.toString();
+  private static List<String> stringList(Object value) {
+    return value instanceof List<?> list ? list.stream().map(String::valueOf).toList() : List.of();
   }
 
-  private void write(BufferedWriter out, Object msg) throws IOException {
-    out.write(json.writeValueAsString(msg));
-    out.write("\n");
-    out.flush();
+  @FunctionalInterface
+  private interface ToolHandler {
+    Object call(Map<String, Object> args);
+  }
+
+  private static final class CloseAwareInputStream extends FilterInputStream {
+    private final CountDownLatch closed = new CountDownLatch(1);
+
+    private CloseAwareInputStream(InputStream in) {
+      super(in);
+    }
+
+    @Override
+    public int read() throws IOException {
+      int value = super.read();
+      if (value == -1) closed.countDown();
+      return value;
+    }
+
+    @Override
+    public int read(byte[] b, int off, int len) throws IOException {
+      int count = super.read(b, off, len);
+      if (count == -1) closed.countDown();
+      return count;
+    }
+
+    @Override
+    public void close() throws IOException {
+      try {
+        super.close();
+      } finally {
+        closed.countDown();
+      }
+    }
+
+    private void awaitClosed() throws InterruptedException {
+      closed.await();
+    }
   }
 }

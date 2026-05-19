@@ -62,6 +62,19 @@ class ArchContextCoreTest {
     assertTrue(m.validateSpecCompleteness("SPEC-001").missingSections().isEmpty());
   }
 
+  @Test
+  void workspaceValidationRequiresImportedDatabase() throws Exception {
+    new WorkspaceService().init(dir);
+
+    IllegalStateException e =
+        assertThrows(
+            IllegalStateException.class,
+            () -> new WorkspaceService().requireImportedWorkspace(dir));
+
+    assertTrue(e.getMessage().contains("archcontext.db"));
+    assertTrue(e.getMessage().contains("archcontext import"));
+  }
+
   private static void writeWorkspace(Path root) throws Exception {
     Path ac = root.resolve(".archcontext");
     Files.createDirectories(ac.resolve("specs"));

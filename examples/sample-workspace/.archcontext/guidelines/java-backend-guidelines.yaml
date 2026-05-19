@@ -1,0 +1,22 @@
+schemaVersion: "1.0"
+guideline:
+  id: java-backend-guidelines
+  title: Java backend guidelines
+  appliesTo:
+    languages:
+      - java
+    repositoryTypes:
+      - backend
+  rules:
+    - id: JAVA-BE-001
+      description: >
+        Keep domain model and application services independent from framework,
+        transport, and persistence APIs.
+    - id: JAVA-BE-002
+      description: >
+        Prefer focused unit tests for domain rules and contract tests for adapters
+        that cross repository or service boundaries.
+    - id: JAVA-BE-003
+      description: >
+        Represent cross-service operations with idempotency keys and explicit
+        state transitions.

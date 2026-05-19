@@ -37,10 +37,17 @@ public class ArchContextCli implements Callable<Integer> {
     return Path.of("").toAbsolutePath().normalize();
   }
 
+  static Path resolveRoot(Path root) {
+    return root == null ? root() : root.toAbsolutePath().normalize();
+  }
+
   @Command(name = "init", description = "Create .archcontext YAML source tree")
   static class Init implements Callable<Integer> {
+    @Option(names = "--root", description = "ArchContext workspace root")
+    Path workspaceRoot;
+
     public Integer call() throws Exception {
-      new WorkspaceService().init(root());
+      new WorkspaceService().init(resolveRoot(workspaceRoot));
       System.err.println("Initialized .archcontext");
       return 0;
     }
@@ -121,8 +128,11 @@ public class ArchContextCli implements Callable<Integer> {
 
   @Command(name = "import", description = "Import YAML into SQLite")
   static class ImportCmd implements Callable<Integer> {
+    @Option(names = "--root", description = "ArchContext workspace root")
+    Path workspaceRoot;
+
     public Integer call() {
-      new ImportService().importWorkspace(root());
+      new ImportService().importWorkspace(resolveRoot(workspaceRoot));
       System.err.println("Imported ArchContext YAML into .archcontext/archcontext.db");
       return 0;
     }
@@ -130,16 +140,22 @@ public class ArchContextCli implements Callable<Integer> {
 
   @Command(name = "export", description = "Export SQLite data to YAML")
   static class ExportCmd implements Callable<Integer> {
+    @Option(names = "--root", description = "ArchContext workspace root")
+    Path workspaceRoot;
+
     public Integer call() {
-      new ExportService().exportWorkspace(root());
+      new ExportService().exportWorkspace(resolveRoot(workspaceRoot));
       return 0;
     }
   }
 
   @Command(name = "doctor", description = "Validate workspace")
   static class Doctor implements Callable<Integer> {
+    @Option(names = "--root", description = "ArchContext workspace root")
+    Path workspaceRoot;
+
     public Integer call() throws Exception {
-      Path r = root(), dir = r.resolve(".archcontext");
+      Path r = resolveRoot(workspaceRoot), dir = r.resolve(".archcontext");
       int issues = 0;
       if (!Files.isDirectory(dir)) {
         System.err.println("FAIL: .archcontext does not exist");
@@ -175,9 +191,14 @@ public class ArchContextCli implements Callable<Integer> {
 
   @Command(name = "mcp", description = "Start MCP stdio server")
   static class Mcp implements Callable<Integer> {
+    @Option(names = "--root", description = "ArchContext workspace root")
+    Path workspaceRoot;
+
     public Integer call() throws Exception {
       System.setProperty("org.slf4j.simpleLogger.logFile", "System.err");
-      new ArchContextMcpServer(root()).run();
+      Path r = resolveRoot(workspaceRoot);
+      new WorkspaceService().requireImportedWorkspace(r);
+      new ArchContextMcpServer(r).run();
       return 0;
     }
   }

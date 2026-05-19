@@ -1,0 +1,29 @@
+schemaVersion: "1.0"
+repositories:
+  - id: booking-api
+    name: Booking API
+    path: ../../booking-api
+    type: backend
+    language: java
+    boundedContext: booking
+    description: >
+      Owns booking lifecycle, cancellation rules, itinerary state, and customer
+      booking history.
+  - id: payment-service
+    name: Payment Service
+    path: ../../payment-service
+    type: backend
+    language: java
+    boundedContext: payment
+    description: >
+      Owns payment authorization, capture, refunds, and payment provider
+      integration.
+  - id: traveler-web
+    name: Traveler Web
+    path: ../../traveler-web
+    type: frontend
+    language: typescript
+    boundedContext: traveler-experience
+    description: >
+      Customer-facing web application for trip search, booking management, and
+      self-service cancellation flows.

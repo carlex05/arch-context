@@ -38,16 +38,16 @@ public class WorkspaceService {
 
   private String defaultSolution() {
     return "schemaVersion: \"1.0\"\n"
-               + "solution:\n"
-               + "  id: archcontext-solution\n"
-               + "  name: ArchContext Solution\n"
-               + "  description: >\n"
-               + "    Describe the multi-repository solution here.\n"
-               + "principles:\n"
-               + "  - id: explicit-decisions\n"
-               + "    title: Explicit architectural decisions\n"
-               + "    description: >\n"
-               + "      Relevant architectural decisions should be documented as ADRs.\n";
+        + "solution:\n"
+        + "  id: archcontext-solution\n"
+        + "  name: ArchContext Solution\n"
+        + "  description: >\n"
+        + "    Describe the multi-repository solution here.\n"
+        + "principles:\n"
+        + "  - id: explicit-decisions\n"
+        + "    title: Explicit architectural decisions\n"
+        + "    description: >\n"
+        + "      Relevant architectural decisions should be documented as ADRs.\n";
   }
 
   private String defaultRepos() {
@@ -55,9 +55,24 @@ public class WorkspaceService {
   }
 
   public void requireWorkspace(Path root) {
-    if (!Files.isDirectory(root.resolve(DIR)))
+    Path workspaceDir = root.resolve(DIR).toAbsolutePath().normalize();
+    if (!Files.isDirectory(workspaceDir))
       throw new IllegalStateException(
-          "Missing .archcontext directory. Run archcontext init first.");
+          "Missing .archcontext directory at "
+              + workspaceDir
+              + ". Set the MCP command working directory to the ArchContext workspace, pass"
+              + " --root <workspace>, or run archcontext init first.");
+  }
+
+  public void requireImportedWorkspace(Path root) {
+    requireWorkspace(root);
+    Path db = dbPath(root).toAbsolutePath().normalize();
+    if (!Files.isRegularFile(db)) {
+      throw new IllegalStateException(
+          "Missing ArchContext SQLite index at "
+              + db
+              + ". Run archcontext import from the workspace before starting MCP.");
+    }
   }
 
   public Path dbPath(Path root) {

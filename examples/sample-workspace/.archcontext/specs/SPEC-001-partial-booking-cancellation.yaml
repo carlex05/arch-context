@@ -1,0 +1,61 @@
+schemaVersion: "1.0"
+spec:
+  id: SPEC-001
+  title: Partial booking cancellation
+  status: active
+  owner: booking-platform-team
+  problem: >
+    Customers can currently cancel an entire booking, but they cannot cancel a
+    subset of booked itinerary items without contacting support.
+  businessGoal: >
+    Reduce support-assisted cancellation volume while preserving payment and
+    itinerary consistency across the platform.
+  affectedRepositories:
+    - booking-api
+    - payment-service
+    - traveler-web
+  affectedBoundedContexts:
+    - booking
+    - payment
+    - traveler-experience
+  functionalRequirements:
+    - id: FR-001
+      description: >
+        Booking API must allow cancellation of selected itinerary items while
+        keeping the remaining items active.
+    - id: FR-002
+      description: >
+        Payment Service must calculate and execute a refund for only the canceled
+        items.
+    - id: FR-003
+      description: >
+        Traveler Web must let customers select cancellable items and preview the
+        expected refund before confirmation.
+  nonFunctionalRequirements:
+    - id: NFR-001
+      description: >
+        Cancellation commands must be idempotent so retries do not create duplicate
+        refunds or inconsistent booking state.
+    - id: NFR-002
+      description: >
+        The customer-facing cancellation flow should complete within two seconds
+        for bookings with fewer than twenty itinerary items.
+  acceptanceCriteria:
+    - id: AC-001
+      description: >
+        Given a booking with three itinerary items, canceling one item leaves the
+        other two active.
+    - id: AC-002
+      description: >
+        A repeated cancellation request for the same item returns the same
+        cancellation result and does not issue a second refund.
+    - id: AC-003
+      description: >
+        Traveler Web shows canceled, active, and non-cancellable items with distinct
+        states after the operation completes.
+  constraints:
+    - Booking API must not directly access payment database tables.
+    - Payment Service remains the system of record for refund execution status.
+    - Traveler Web must consume public APIs only; no direct database access.
+  relatedAdrs:
+    - ADR-001

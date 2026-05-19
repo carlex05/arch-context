@@ -1,0 +1,23 @@
+schemaVersion: "1.0"
+adr:
+  id: ADR-001
+  title: Use hexagonal architecture for booking and payment services
+  status: accepted
+  date: "2026-05-19"
+  context: >
+    Booking and payment changes frequently combine business rules, provider
+    integrations, persistence, and public API contracts. Keeping these concerns
+    coupled makes partial cancellation risky to evolve and hard to test.
+  decision: >
+    Backend services in the booking platform use hexagonal architecture. Domain
+    rules live behind application ports, while adapters handle HTTP, persistence,
+    messaging, and third-party providers.
+  consequences:
+    - Domain logic must not depend on controllers, database clients, or provider SDKs.
+    - Integration adapters can evolve independently from domain cancellation rules.
+    - Unit tests should cover domain behavior without starting infrastructure.
+  affectedRepositories:
+    - booking-api
+    - payment-service
+  relatedSpecs:
+    - SPEC-001
