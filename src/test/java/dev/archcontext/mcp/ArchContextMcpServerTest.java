@@ -55,7 +55,10 @@ class ArchContextMcpServerTest {
             "get_spec_context",
             "get_implementation_context_for_spec",
             "validate_spec_completeness",
-            "list_active_specs"),
+            "list_active_specs",
+            "upsert_repository",
+            "create_spec",
+            "upsert_spec_requirement"),
         tools.keySet());
 
     assertStrictNoArgSchema(tools.get("get_solution_context"));
@@ -67,6 +70,22 @@ class ArchContextMcpServerTest {
     assertProperty(tools.get("search_context"), "types");
     assertRequired(tools.get("get_implementation_context_for_spec"), "specId");
     assertProperty(tools.get("get_implementation_context_for_spec"), "repositoryId");
+    assertRequired(tools.get("upsert_repository"), "id");
+    assertRequired(tools.get("upsert_repository"), "name");
+    assertRequired(tools.get("upsert_repository"), "type");
+    assertRequired(tools.get("upsert_repository"), "language");
+    assertProperty(tools.get("upsert_repository"), "dryRun");
+    assertRequired(tools.get("create_spec"), "id");
+    assertRequired(tools.get("create_spec"), "title");
+    assertRequired(tools.get("create_spec"), "status");
+    assertRequired(tools.get("create_spec"), "owner");
+    assertRequired(tools.get("create_spec"), "problem");
+    assertRequired(tools.get("create_spec"), "businessGoal");
+    assertProperty(tools.get("create_spec"), "dryRun");
+    assertRequired(tools.get("upsert_spec_requirement"), "specId");
+    assertRequired(tools.get("upsert_spec_requirement"), "requirementType");
+    assertRequired(tools.get("upsert_spec_requirement"), "id");
+    assertRequired(tools.get("upsert_spec_requirement"), "description");
   }
 
   @Test

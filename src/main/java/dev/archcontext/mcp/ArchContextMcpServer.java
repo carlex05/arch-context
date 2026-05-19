@@ -1,6 +1,9 @@
 package dev.archcontext.mcp;
 
+import com.fasterxml.jackson.databind.JavaType;
+import dev.archcontext.domain.Models.*;
 import dev.archcontext.service.McpContextService;
+import dev.archcontext.service.YamlWorkspaceWriter;
 import dev.archcontext.util.Json;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.jackson3.JacksonMcpJsonMapperSupplier;
@@ -22,6 +25,7 @@ public class ArchContextMcpServer {
   private static final String JSON_MIME_TYPE = "application/json";
 
   private final McpContextService svc;
+  private final YamlWorkspaceWriter writer;
   private final McpJsonMapper jsonMapper;
 
   public ArchContextMcpServer(Path root) {
@@ -30,6 +34,7 @@ public class ArchContextMcpServer {
 
   ArchContextMcpServer(Path root, McpJsonMapper jsonMapper) {
     this.svc = new McpContextService(root);
+    this.writer = new YamlWorkspaceWriter(root);
     this.jsonMapper = jsonMapper;
   }
 
@@ -87,18 +92,21 @@ public class ArchContextMcpServer {
     return List.of(
         tool(
             "get_solution_context",
-            "get solution context",
+            "Return solution metadata, architecture principles, repositories, active specs, and"
+                + " accepted ADRs for the workspace.",
             strictObjectSchema(Map.of(), List.of()),
             args -> svc.getSolutionContext()),
         tool(
             "get_repository_context",
-            "get repository context",
+            "Return repository metadata, related specs, ADRs, applicable guidelines, and"
+                + " constraints for one repository.",
             strictObjectSchema(
                 Map.of("repositoryId", stringProperty("Repository id")), "repositoryId"),
             args -> svc.getRepositoryContext(requiredString(args, "repositoryId"))),
         tool(
             "search_context",
-            "search context",
+            "Search specs, ADRs, guidelines, and solution context for targeted architecture"
+                + " information.",
             strictObjectSchema(
                 Map.of(
                     "query",
@@ -116,12 +124,14 @@ public class ArchContextMcpServer {
                 svc.searchContext(requiredString(args, "query"), stringList(args.get("types")))),
         tool(
             "get_spec_context",
-            "get spec context",
+            "Return the full structured spec context for one spec id.",
             strictObjectSchema(Map.of("specId", stringProperty("Spec id")), "specId"),
             args -> svc.getSpecContext(requiredString(args, "specId"))),
         tool(
             "get_implementation_context_for_spec",
-            "get implementation context for spec",
+            "Return focused implementation context for a spec, including affected repositories,"
+                + " requirements, acceptance criteria, constraints, related ADRs, and applicable"
+                + " guidelines.",
             strictObjectSchema(
                 Map.of(
                     "specId",
@@ -134,14 +144,96 @@ public class ArchContextMcpServer {
                     requiredString(args, "specId"), optionalString(args, "repositoryId"))),
         tool(
             "validate_spec_completeness",
-            "validate spec completeness",
+            "Check whether a spec has the minimum sections needed for implementation planning.",
             strictObjectSchema(Map.of("specId", stringProperty("Spec id")), "specId"),
             args -> svc.validateSpecCompleteness(requiredString(args, "specId"))),
         tool(
             "list_active_specs",
-            "list active specs",
+            "Return specs with active implementation statuses such as draft, active, in-progress,"
+                + " or review.",
             strictObjectSchema(Map.of(), List.of()),
-            args -> svc.listActiveSpecs()));
+            args -> svc.listActiveSpecs()),
+        tool(
+            "upsert_repository",
+            "Create or update a repository definition in repositories.yaml using structured,"
+                + " validated input.",
+            strictObjectSchema(
+                Map.ofEntries(
+                    Map.entry("id", stringProperty("Lowercase kebab-case repository id")),
+                    Map.entry("name", stringProperty("Repository display name")),
+                    Map.entry("path", stringProperty("Optional repository path")),
+                    Map.entry(
+                        "type", stringProperty("Repository type such as backend or frontend")),
+                    Map.entry("language", stringProperty("Primary repository language")),
+                    Map.entry("boundedContext", stringProperty("Optional bounded context")),
+                    Map.entry(
+                        "description",
+                        stringProperty("Optional repository responsibility summary")),
+                    Map.entry(
+                        "responsibilities", arrayProperty("Optional repository responsibilities")),
+                    Map.entry("components", arrayProperty("Optional repository components")),
+                    Map.entry("dryRun", booleanProperty("Validate and preview without writing"))),
+                "id",
+                "name",
+                "type",
+                "language"),
+            args -> writer.upsertRepository(repository(args), bool(args.get("dryRun")))),
+        tool(
+            "create_spec",
+            "Create a new spec YAML file under specs/ using structured, validated input.",
+            strictObjectSchema(
+                Map.ofEntries(
+                    Map.entry("id", stringProperty("Spec id")),
+                    Map.entry("title", stringProperty("Spec title")),
+                    Map.entry("status", stringProperty("Spec status")),
+                    Map.entry("owner", stringProperty("Spec owner")),
+                    Map.entry("problem", stringProperty("Problem statement")),
+                    Map.entry("businessGoal", stringProperty("Business goal")),
+                    Map.entry(
+                        "affectedRepositories", stringArrayProperty("Affected repository ids")),
+                    Map.entry("affectedComponents", arrayProperty("Affected component refs")),
+                    Map.entry("functionalRequirements", arrayProperty("Functional requirements")),
+                    Map.entry(
+                        "nonFunctionalRequirements", arrayProperty("Non-functional requirements")),
+                    Map.entry("acceptanceCriteria", arrayProperty("Acceptance criteria")),
+                    Map.entry("constraints", arrayProperty("Structured constraints")),
+                    Map.entry("outOfScope", arrayProperty("Out-of-scope items")),
+                    Map.entry("openQuestions", arrayProperty("Open questions")),
+                    Map.entry("relatedAdrs", stringArrayProperty("Related ADR ids")),
+                    Map.entry("dryRun", booleanProperty("Validate and preview without writing"))),
+                "id",
+                "title",
+                "status",
+                "owner",
+                "problem",
+                "businessGoal"),
+            args -> writer.createSpec(spec(args), bool(args.get("dryRun")))),
+        tool(
+            "upsert_spec_requirement",
+            "Add or update one functional or non-functional requirement in an existing spec YAML.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "requirementType",
+                    stringProperty("functional or nonFunctional"),
+                    "id",
+                    stringProperty("Requirement id"),
+                    "description",
+                    stringProperty("Requirement description"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "specId",
+                "requirementType",
+                "id",
+                "description"),
+            args ->
+                writer.upsertSpecRequirement(
+                    requiredString(args, "specId"),
+                    requiredString(args, "requirementType"),
+                    new Requirement(
+                        requiredString(args, "id"), requiredString(args, "description")),
+                    bool(args.get("dryRun")))));
   }
 
   List<McpServerFeatures.SyncPromptSpecification> promptSpecifications() {
@@ -224,10 +316,12 @@ public class ArchContextMcpServer {
     try {
       Object data = handler.call(arguments == null ? Map.of() : arguments);
       Object structured = Map.of("data", Json.MAPPER.convertValue(data, Object.class));
+      boolean isToolError =
+          data instanceof WriteResult result && !result.validation().errors().isEmpty();
       return McpSchema.CallToolResult.builder()
           .content(List.of(new McpSchema.TextContent(Json.write(data))))
           .structuredContent(structured)
-          .isError(false)
+          .isError(isToolError)
           .build();
     } catch (IllegalArgumentException e) {
       return McpSchema.CallToolResult.builder()
@@ -272,6 +366,18 @@ public class ArchContextMcpServer {
     return Map.of("type", "string", "description", description);
   }
 
+  private static Map<String, Object> booleanProperty(String description) {
+    return Map.of("type", "boolean", "description", description);
+  }
+
+  private static Map<String, Object> arrayProperty(String description) {
+    return Map.of("type", "array", "items", Map.of("type", "object"), "description", description);
+  }
+
+  private static Map<String, Object> stringArrayProperty(String description) {
+    return Map.of("type", "array", "items", Map.of("type", "string"), "description", description);
+  }
+
   private static String requiredString(Map<String, Object> args, String name) {
     String value = optionalString(args, name);
     if (value == null || value.isBlank()) {
@@ -287,6 +393,51 @@ public class ArchContextMcpServer {
 
   private static List<String> stringList(Object value) {
     return value instanceof List<?> list ? list.stream().map(String::valueOf).toList() : List.of();
+  }
+
+  private static boolean bool(Object value) {
+    return value instanceof Boolean b && b;
+  }
+
+  private static RepositoryDefinition repository(Map<String, Object> args) {
+    return new RepositoryDefinition(
+        requiredString(args, "id"),
+        requiredString(args, "name"),
+        optionalString(args, "path"),
+        requiredString(args, "type"),
+        requiredString(args, "language"),
+        optionalString(args, "boundedContext"),
+        optionalString(args, "description"),
+        list(args.get("responsibilities"), Responsibility.class),
+        list(args.get("components"), Component.class));
+  }
+
+  private static Spec spec(Map<String, Object> args) {
+    return new Spec(
+        requiredString(args, "id"),
+        requiredString(args, "title"),
+        requiredString(args, "status"),
+        requiredString(args, "owner"),
+        requiredString(args, "problem"),
+        requiredString(args, "businessGoal"),
+        stringList(args.get("affectedRepositories")),
+        List.of(),
+        list(args.get("functionalRequirements"), Requirement.class),
+        list(args.get("nonFunctionalRequirements"), Requirement.class),
+        list(args.get("acceptanceCriteria"), AcceptanceCriterion.class),
+        List.of(),
+        list(args.get("constraints"), Constraint.class),
+        list(args.get("affectedComponents"), ComponentRef.class),
+        list(args.get("outOfScope"), OutOfScopeItem.class),
+        list(args.get("openQuestions"), OpenQuestion.class),
+        stringList(args.get("relatedAdrs")),
+        null);
+  }
+
+  private static <T> List<T> list(Object value, Class<T> type) {
+    if (!(value instanceof List<?>)) return List.of();
+    JavaType listType = Json.MAPPER.getTypeFactory().constructCollectionType(List.class, type);
+    return Json.MAPPER.convertValue(value, listType);
   }
 
   @FunctionalInterface

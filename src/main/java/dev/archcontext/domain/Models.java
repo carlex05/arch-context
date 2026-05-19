@@ -20,13 +20,48 @@ public final class Models {
       String type,
       String language,
       String boundedContext,
-      String description) {}
+      String description,
+      List<Responsibility> responsibilities,
+      List<Component> components) {
+    public RepositoryDefinition {
+      responsibilities = responsibilities == null ? List.of() : responsibilities;
+      components = components == null ? List.of() : components;
+    }
+
+    public RepositoryDefinition(
+        String id,
+        String name,
+        String path,
+        String type,
+        String language,
+        String boundedContext,
+        String description) {
+      this(id, name, path, type, language, boundedContext, description, List.of(), List.of());
+    }
+  }
+
+  public record Responsibility(String id, String description) {}
+
+  public record Component(
+      String id, String name, String type, String description, List<String> responsibilities) {
+    public Component {
+      responsibilities = responsibilities == null ? List.of() : responsibilities;
+    }
+  }
+
+  public record ComponentRef(String repositoryId, String componentId) {}
 
   public record LocalRepositoryOverride(String path) {}
 
   public record Requirement(String id, String description) {}
 
   public record AcceptanceCriterion(String id, String description) {}
+
+  public record Constraint(String id, String title, String description) {}
+
+  public record OutOfScopeItem(String description) {}
+
+  public record OpenQuestion(String id, String question) {}
 
   public record Spec(
       String id,
@@ -41,8 +76,64 @@ public final class Models {
       List<Requirement> nonFunctionalRequirements,
       List<AcceptanceCriterion> acceptanceCriteria,
       List<String> constraints,
+      List<Constraint> structuredConstraints,
+      List<ComponentRef> affectedComponents,
+      List<OutOfScopeItem> outOfScope,
+      List<OpenQuestion> openQuestions,
       List<String> relatedAdrs,
-      String sourcePath) {}
+      String sourcePath) {
+    public Spec {
+      affectedRepositories = affectedRepositories == null ? List.of() : affectedRepositories;
+      affectedBoundedContexts =
+          affectedBoundedContexts == null ? List.of() : affectedBoundedContexts;
+      functionalRequirements = functionalRequirements == null ? List.of() : functionalRequirements;
+      nonFunctionalRequirements =
+          nonFunctionalRequirements == null ? List.of() : nonFunctionalRequirements;
+      acceptanceCriteria = acceptanceCriteria == null ? List.of() : acceptanceCriteria;
+      constraints = constraints == null ? List.of() : constraints;
+      structuredConstraints = structuredConstraints == null ? List.of() : structuredConstraints;
+      affectedComponents = affectedComponents == null ? List.of() : affectedComponents;
+      outOfScope = outOfScope == null ? List.of() : outOfScope;
+      openQuestions = openQuestions == null ? List.of() : openQuestions;
+      relatedAdrs = relatedAdrs == null ? List.of() : relatedAdrs;
+    }
+
+    public Spec(
+        String id,
+        String title,
+        String status,
+        String owner,
+        String problem,
+        String businessGoal,
+        List<String> affectedRepositories,
+        List<String> affectedBoundedContexts,
+        List<Requirement> functionalRequirements,
+        List<Requirement> nonFunctionalRequirements,
+        List<AcceptanceCriterion> acceptanceCriteria,
+        List<String> constraints,
+        List<String> relatedAdrs,
+        String sourcePath) {
+      this(
+          id,
+          title,
+          status,
+          owner,
+          problem,
+          businessGoal,
+          affectedRepositories,
+          affectedBoundedContexts,
+          functionalRequirements,
+          nonFunctionalRequirements,
+          acceptanceCriteria,
+          constraints,
+          List.of(),
+          List.of(),
+          List.of(),
+          List.of(),
+          relatedAdrs,
+          sourcePath);
+    }
+  }
 
   public record Adr(
       String id,
@@ -91,6 +182,16 @@ public final class Models {
 
   public record ValidationResult(
       List<String> missingSections, List<String> warnings, List<String> suggestions) {}
+
+  public record WriteValidation(List<String> errors, List<String> warnings) {}
+
+  public record WriteResult(
+      boolean changed,
+      boolean dryRun,
+      List<String> updatedFiles,
+      String summary,
+      WriteValidation validation,
+      Object object) {}
 
   public record ImplementationContext(
       Spec spec,
