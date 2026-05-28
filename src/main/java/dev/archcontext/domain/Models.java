@@ -9,9 +9,47 @@ public final class Models {
 
   public record ArchContextWorkspace(Path root, Path archContextDir) {}
 
-  public record Solution(String id, String name, String description) {}
+  public record Solution(
+      String id,
+      String name,
+      String description,
+      String vision,
+      List<CrossCuttingConcern> crossCuttingConcerns,
+      List<GlossaryTerm> glossary) {
+    public Solution {
+      crossCuttingConcerns = crossCuttingConcerns == null ? List.of() : crossCuttingConcerns;
+      glossary = glossary == null ? List.of() : glossary;
+    }
 
-  public record Principle(String id, String title, String description) {}
+    public Solution(String id, String name, String description) {
+      this(id, name, description, null, List.of(), List.of());
+    }
+  }
+
+  public record CrossCuttingConcern(String id, String title, String description) {}
+
+  public record GlossaryTerm(
+      String term, String definition, List<String> aliases, List<String> relatedTerms) {
+    public GlossaryTerm {
+      aliases = aliases == null ? List.of() : aliases;
+      relatedTerms = relatedTerms == null ? List.of() : relatedTerms;
+    }
+
+    public GlossaryTerm(String term, String definition) {
+      this(term, definition, List.of(), List.of());
+    }
+  }
+
+  public record Principle(
+      String id, String title, String description, String rationale, List<String> appliesTo) {
+    public Principle {
+      appliesTo = appliesTo == null ? List.of() : appliesTo;
+    }
+
+    public Principle(String id, String title, String description) {
+      this(id, title, description, null, List.of());
+    }
+  }
 
   public record RepositoryDefinition(
       String id,
@@ -40,16 +78,43 @@ public final class Models {
     }
   }
 
-  public record Responsibility(String id, String description) {}
-
-  public record Component(
-      String id, String name, String type, String description, List<String> responsibilities) {
-    public Component {
-      responsibilities = responsibilities == null ? List.of() : responsibilities;
+  public record Responsibility(String id, String description, String category) {
+    public Responsibility(String id, String description) {
+      this(id, description, null);
     }
   }
 
-  public record ComponentRef(String repositoryId, String componentId) {}
+  public record Component(
+      String id,
+      String name,
+      String type,
+      String path,
+      String description,
+      List<String> responsibilities,
+      List<String> dependsOn) {
+    public Component {
+      responsibilities = responsibilities == null ? List.of() : responsibilities;
+      dependsOn = dependsOn == null ? List.of() : dependsOn;
+    }
+
+    public Component(
+        String id, String name, String type, String description, List<String> responsibilities) {
+      this(id, name, type, null, description, responsibilities, List.of());
+    }
+  }
+
+  public record ComponentRef(
+      String repositoryId,
+      String componentId,
+      String path,
+      Integer lineStart,
+      Integer lineEnd,
+      String role,
+      String note) {
+    public ComponentRef(String repositoryId, String componentId) {
+      this(repositoryId, componentId, null, null, null, null, null);
+    }
+  }
 
   public record LocalRepositoryOverride(String path) {}
 
@@ -210,11 +275,54 @@ public final class Models {
       String sourcePath) {}
 
   public record Guideline(
-      String id, String title, AppliesTo appliesTo, List<GuidelineRule> rules, String sourcePath) {}
+      String id,
+      String title,
+      String category,
+      AppliesTo appliesTo,
+      List<GuidelineRule> rules,
+      List<String> references,
+      List<String> relatedAdrs,
+      List<String> relatedSpecs,
+      String sourcePath) {
+    public Guideline {
+      rules = rules == null ? List.of() : rules;
+      references = references == null ? List.of() : references;
+      relatedAdrs = relatedAdrs == null ? List.of() : relatedAdrs;
+      relatedSpecs = relatedSpecs == null ? List.of() : relatedSpecs;
+    }
 
-  public record AppliesTo(List<String> languages, List<String> repositoryTypes) {}
+    public Guideline(
+        String id, String title, AppliesTo appliesTo, List<GuidelineRule> rules, String sourcePath) {
+      this(id, title, null, appliesTo, rules, List.of(), List.of(), List.of(), sourcePath);
+    }
+  }
 
-  public record GuidelineRule(String id, String description) {}
+  public record AppliesTo(
+      List<String> repositoryIds, List<String> languages, List<String> repositoryTypes) {
+    public AppliesTo {
+      repositoryIds = repositoryIds == null ? List.of() : repositoryIds;
+      languages = languages == null ? List.of() : languages;
+      repositoryTypes = repositoryTypes == null ? List.of() : repositoryTypes;
+    }
+
+    public AppliesTo(List<String> languages, List<String> repositoryTypes) {
+      this(List.of(), languages, repositoryTypes);
+    }
+  }
+
+  public record GuidelineRule(
+      String id, String description, String statement, String rationale, RuleExamples examples) {
+    public GuidelineRule(String id, String description) {
+      this(id, description, null, null, null);
+    }
+  }
+
+  public record RuleExamples(List<String> good, List<String> bad) {
+    public RuleExamples {
+      good = good == null ? List.of() : good;
+      bad = bad == null ? List.of() : bad;
+    }
+  }
 
   public record ContextDocument(
       String type, String id, String title, String path, String content, String hash) {}
@@ -275,6 +383,23 @@ public final class Models {
       List<Requirement> applicableFunctionalRequirements,
       List<Requirement> applicableNonFunctionalRequirements,
       List<AcceptanceCriterion> applicableAcceptanceCriteria,
+      List<String> constraints,
+      List<Constraint> structuredConstraints,
+      List<Adr> relatedAdrs,
+      List<Guideline> applicableGuidelines) {}
+
+  public record AgentBriefing(
+      Solution solution,
+      List<Principle> principles,
+      List<GlossaryTerm> glossary,
+      Spec spec,
+      RepositoryDefinition repository,
+      RepositoryChange repositoryChange,
+      List<RepositoryDefinition> otherAffectedRepositories,
+      List<ComponentRef> affectedComponents,
+      List<Requirement> functionalRequirements,
+      List<Requirement> nonFunctionalRequirements,
+      List<AcceptanceCriterion> acceptanceCriteria,
       List<String> constraints,
       List<Constraint> structuredConstraints,
       List<Adr> relatedAdrs,
