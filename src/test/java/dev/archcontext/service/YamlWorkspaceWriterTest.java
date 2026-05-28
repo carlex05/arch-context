@@ -70,6 +70,77 @@ class YamlWorkspaceWriterTest {
   }
 
   @Test
+  void createAdrWritesUnderAdrsDirectory() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+
+    WriteResult result = writer.createAdr(adr("ADR-001", List.of("booking-api"), List.of()), false);
+
+    assertTrue(result.changed());
+    assertTrue(Files.exists(root.resolve(".archcontext/adrs/adr-001.yaml")));
+    assertEquals(List.of(".archcontext/adrs/adr-001.yaml"), result.updatedFiles());
+    assertEquals("ADR-001", yaml.read(root.resolve(".archcontext/adrs/adr-001.yaml")).adr.id());
+  }
+
+  @Test
+  void createAdrRejectsUnknownRepositoryReference() {
+    WriteResult result = writer.createAdr(adr("ADR-001", List.of("unknown-api"), List.of()), false);
+
+    assertFalse(result.changed());
+    assertTrue(
+        result.validation().errors().stream()
+            .anyMatch(e -> e.contains("Unknown affected repository")));
+    assertFalse(Files.exists(root.resolve(".archcontext/adrs/adr-001.yaml")));
+  }
+
+  @Test
+  void createAdrRejectsUnknownRelatedSpec() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+
+    WriteResult result =
+        writer.createAdr(adr("ADR-001", List.of("booking-api"), List.of("SPEC-404")), false);
+
+    assertFalse(result.changed());
+    assertTrue(
+        result.validation().errors().stream().anyMatch(e -> e.contains("Unknown related spec")));
+  }
+
+  @Test
+  void upsertAdrUpdatesExistingAdrById() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createAdr(adr("ADR-001", List.of("booking-api"), List.of()), false);
+
+    WriteResult result =
+        writer.upsertAdr(
+            new Adr(
+                "ADR-001",
+                "Use layered architecture",
+                "accepted",
+                "2026-05-28",
+                "Need clear module boundaries.",
+                "Use layered architecture.",
+                List.of("Controllers must not contain business logic."),
+                List.of("booking-api"),
+                List.of(),
+                null),
+            false);
+
+    assertTrue(result.changed());
+    Adr adr = yaml.read(root.resolve(".archcontext/adrs/adr-001.yaml")).adr;
+    assertEquals("Use layered architecture", adr.title());
+  }
+
+  @Test
+  void createAdrDryRunDoesNotWriteFile() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+
+    WriteResult result = writer.createAdr(adr("ADR-001", List.of("booking-api"), List.of()), true);
+
+    assertTrue(result.changed());
+    assertTrue(result.dryRun());
+    assertFalse(Files.exists(root.resolve(".archcontext/adrs/adr-001.yaml")));
+  }
+
+  @Test
   void upsertSpecRequirementAddsFunctionalRequirement() throws Exception {
     writer.upsertRepository(repository("booking-api", "Booking API"), false);
     writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
@@ -409,6 +480,20 @@ class YamlWorkspaceWriterTest {
   }
 
   @Test
+  void importIndexRunsAfterSuccessfulAdrWrite() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+
+    writer.createAdr(adr("ADR-001", List.of("booking-api"), List.of()), false);
+
+    try (Connection c = new Database(root.resolve(".archcontext/archcontext.db")).connect();
+        ResultSet rs =
+            c.createStatement().executeQuery("SELECT count(*) FROM adrs WHERE id='ADR-001'")) {
+      assertTrue(rs.next());
+      assertEquals(1, rs.getInt(1));
+    }
+  }
+
+  @Test
   void existingYamlOnePointZeroSampleRemainsReadable() {
     Path sample = Path.of("examples/sample-workspace").toAbsolutePath().normalize();
 
@@ -454,6 +539,20 @@ class YamlWorkspaceWriterTest {
         List.of(new OutOfScopeItem("Loyalty refunds are out of scope.")),
         List.of(new OpenQuestion("OQ-001", "Should provider fees be shown?")),
         List.of(),
+        null);
+  }
+
+  private static Adr adr(String id, List<String> repositories, List<String> relatedSpecs) {
+    return new Adr(
+        id,
+        "Use hexagonal architecture",
+        "accepted",
+        "2026-05-28",
+        "Need to isolate business rules from delivery mechanisms.",
+        "Use hexagonal architecture.",
+        List.of("Domain logic must not depend on controllers."),
+        repositories,
+        relatedSpecs,
         null);
   }
 

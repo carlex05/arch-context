@@ -89,6 +89,38 @@ public class WorkspaceValidator {
     return new WriteValidation(errors, warnings);
   }
 
+  public WriteValidation validateAdr(Path root, Adr adr) {
+    List<String> errors = new ArrayList<>();
+    List<String> warnings = new ArrayList<>();
+    if (blank(adr.id())) errors.add("ADR id is required.");
+    if (blank(adr.title())) errors.add("ADR title is required.");
+    if (blank(adr.status())) errors.add("ADR status is required.");
+    if (blank(adr.date())) errors.add("ADR date is required.");
+    if (blank(adr.context())) errors.add("ADR context is required.");
+    if (blank(adr.decision())) errors.add("ADR decision is required.");
+
+    try {
+      Map<String, RepositoryDefinition> repositories =
+          repositoryService.list(root).stream()
+              .collect(Collectors.toMap(RepositoryDefinition::id, r -> r, (a, b) -> a));
+      for (String repositoryId : nvl(adr.affectedRepositories())) {
+        if (!repositories.containsKey(repositoryId)) {
+          errors.add("Unknown affected repository in ADR " + adr.id() + ": " + repositoryId);
+        }
+      }
+      Set<String> specIds = specs(root).stream().map(Spec::id).collect(Collectors.toSet());
+      for (String specId : nvl(adr.relatedSpecs())) {
+        if (!specIds.contains(specId)) {
+          errors.add("Unknown related spec in ADR " + adr.id() + ": " + specId);
+        }
+      }
+    } catch (IOException e) {
+      errors.add("Cannot validate ADR references: " + e.getMessage());
+    }
+
+    return new WriteValidation(errors, warnings);
+  }
+
   public WriteValidation validateSpecRepositoryCoverage(Path root, Spec spec, boolean strict) {
     List<String> errors = new ArrayList<>();
     List<String> warnings = new ArrayList<>();
@@ -184,12 +216,17 @@ public class WorkspaceValidator {
 
     Path repositoriesFile = archContextDir.resolve("repositories.yaml").normalize();
     Path specsDir = archContextDir.resolve("specs").normalize();
+    Path adrsDir = archContextDir.resolve("adrs").normalize();
     boolean knownRepositoriesFile = normalizedTarget.equals(repositoriesFile);
     boolean knownSpecFile =
         normalizedTarget.getParent() != null
             && normalizedTarget.getParent().normalize().equals(specsDir)
             && normalizedTarget.getFileName().toString().endsWith(".yaml");
-    if (!knownRepositoriesFile && !knownSpecFile) {
+    boolean knownAdrFile =
+        normalizedTarget.getParent() != null
+            && normalizedTarget.getParent().normalize().equals(adrsDir)
+            && normalizedTarget.getFileName().toString().endsWith(".yaml");
+    if (!knownRepositoriesFile && !knownSpecFile && !knownAdrFile) {
       throw new IllegalArgumentException("Unsupported ArchContext write target: " + target);
     }
   }

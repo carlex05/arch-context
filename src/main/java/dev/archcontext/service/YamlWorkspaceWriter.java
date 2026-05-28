@@ -88,6 +88,72 @@ public class YamlWorkspaceWriter {
     }
   }
 
+  public WriteResult createAdr(Adr adr, boolean dryRun) {
+    Path target = adrFile(adr);
+    validator.validateKnownWriteTarget(root, target);
+    WriteValidation validation = validator.validateAdr(root, adr);
+    if (Files.exists(target)) {
+      validation =
+          new WriteValidation(
+              append(validation.errors(), "ADR already exists: " + relative(target)),
+              validation.warnings());
+    }
+    if (!validation.errors().isEmpty()) {
+      return result(false, dryRun, target, "ADR was not written.", validation, adr);
+    }
+
+    try {
+      YamlDocuments doc = new YamlDocuments();
+      doc.schemaVersion = "1.1";
+      doc.adr = adr;
+      if (!dryRun) {
+        writeAtomically(target, doc);
+        reindex();
+      }
+      return result(true, dryRun, target, "Created ADR " + adr.id() + ".", validation, adr);
+    } catch (IOException e) {
+      return result(
+          false,
+          dryRun,
+          target,
+          "ADR was not written.",
+          new WriteValidation(List.of(e.getMessage()), validation.warnings()),
+          adr);
+    }
+  }
+
+  public WriteResult upsertAdr(Adr adr, boolean dryRun) {
+    Path target = findAdrPath(adr.id());
+    if (target == null) target = adrFile(adr);
+    validator.validateKnownWriteTarget(root, target);
+    WriteValidation validation = validator.validateAdr(root, adr);
+    if (!validation.errors().isEmpty()) {
+      return result(false, dryRun, target, "ADR was not written.", validation, adr);
+    }
+
+    try {
+      YamlDocuments doc = Files.exists(target) ? yaml.read(target) : new YamlDocuments();
+      Adr existing = doc.adr;
+      boolean changed = existing == null || !existing.equals(adr);
+      doc.schemaVersion = "1.1";
+      doc.adr = adr;
+      if (changed && !dryRun) {
+        writeAtomically(target, doc);
+        reindex();
+      }
+      String action = existing == null ? "Created ADR " : "Updated ADR ";
+      return result(changed, dryRun, target, action + adr.id() + ".", validation, adr);
+    } catch (IOException e) {
+      return result(
+          false,
+          dryRun,
+          target,
+          "ADR was not written.",
+          new WriteValidation(List.of(e.getMessage()), validation.warnings()),
+          adr);
+    }
+  }
+
   public WriteResult upsertSpecRequirement(
       String specId, String requirementType, Requirement requirement, boolean dryRun) {
     return updateSpec(
@@ -389,6 +455,22 @@ public class YamlWorkspaceWriter {
     return null;
   }
 
+  private Path findAdrPath(String adrId) {
+    if (!Files.isDirectory(adrsDir())) return null;
+    try (var paths = Files.list(adrsDir())) {
+      for (Path path :
+          paths.filter(p -> p.getFileName().toString().endsWith(".yaml")).sorted().toList()) {
+        YamlDocuments doc = yaml.read(path);
+        if (doc.adr != null && adrId.equals(doc.adr.id())) {
+          return path;
+        }
+      }
+    } catch (IOException e) {
+      throw new IllegalArgumentException(e.getMessage(), e);
+    }
+    return null;
+  }
+
   private YamlDocuments readOrNew(Path path) throws IOException {
     return Files.exists(path) ? yaml.read(path) : new YamlDocuments();
   }
@@ -444,8 +526,16 @@ public class YamlWorkspaceWriter {
     return archContextDir.resolve("specs");
   }
 
+  private Path adrsDir() {
+    return archContextDir.resolve("adrs");
+  }
+
   private Path specFile(Spec spec) {
     return specsDir().resolve(slug(spec.id()) + ".yaml");
+  }
+
+  private Path adrFile(Adr adr) {
+    return adrsDir().resolve(slug(adr.id()) + ".yaml");
   }
 
   private String relative(Path path) {
