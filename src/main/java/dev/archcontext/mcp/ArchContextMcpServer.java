@@ -388,8 +388,8 @@ public class ArchContextMcpServer {
             "create_spec",
             "create spec",
             "Create a new ArchContext spec YAML with schemaVersion, spec metadata, requirements,"
-                + " acceptance criteria, constraints, and related ADRs. Use concise IDs and cite"
-                + " affected repositories."),
+                + " acceptance criteria, constraints, repositoryChanges, contracts, and related"
+                + " ADRs. Use concise IDs and assign work explicitly to affected repositories."),
         prompt(
             "review_spec",
             "review spec",
@@ -400,12 +400,14 @@ public class ArchContextMcpServer {
             "plan_implementation_from_spec",
             "plan implementation from spec",
             "Build an implementation plan from the spec and ArchContext repository/ADR/guideline"
-                + " context. Keep work scoped by repository and acceptance criterion."),
+                + " context. Keep work scoped by repositoryChange, contract, and acceptance"
+                + " criterion."),
         prompt(
             "validate_implementation_against_spec",
             "validate implementation against spec",
             "Validate the implementation against the spec acceptance criteria, constraints,"
-                + " related ADRs, and applicable guidelines. Report gaps and risks."),
+                + " repositoryChanges, contracts, related ADRs, and applicable guidelines. Report"
+                + " gaps and risks."),
         prompt(
             "suggest_adr",
             "suggest adr",

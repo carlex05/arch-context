@@ -182,6 +182,8 @@ ArchContext uses the official Java MCP SDK. The currently integrated SDK version
 - Start with `get_solution_context` to understand the solution, repositories, active specs, and accepted ADRs.
 - Use `get_repository_context` when working inside one repository.
 - Use `get_implementation_context_for_spec` before implementing a spec.
+- Use `resolve_repository_by_path` when an agent is running inside a local checkout and needs its ArchContext repository id.
+- Use `get_repository_implementation_context_for_spec` for repo-scoped implementation work; it returns the local repositoryChange, applicable requirements, acceptance criteria, contracts, constraints, ADRs, guidelines, and other affected repositories.
 - Use `search_context` for targeted architecture lookup.
 - Prefer tools over broad resources for implementation workflows.
 
@@ -196,10 +198,12 @@ Current write tools:
 - `upsert_spec_requirement`: add or update one functional or non-functional requirement in an existing spec.
 - `upsert_spec_acceptance_criterion`: add or update one acceptance criterion in an existing spec.
 - `upsert_spec_constraint`: add or update one structured constraint in an existing spec without removing legacy constraints.
+- `upsert_spec_repository_change`: add or update one repository-scoped implementation plan in an existing spec.
 - `add_spec_out_of_scope_item`: add an out-of-scope item while avoiding duplicate descriptions.
+- `validate_spec_repository_coverage`: validate repositoryChanges coverage for one spec.
 - `validate_workspace`: validate repository references, component references, active spec readiness, related ADRs, and schema versions without writing files.
 
-For Spec-Driven Development, acceptance criteria, constraints, and out-of-scope items are central. They make the implementation boundary explicit for both humans and agents: what must be true, what architectural rules must be respected, and what must not be implemented in the current change.
+For Spec-Driven Development, acceptance criteria, constraints, repositoryChanges, contracts, and out-of-scope items are central. They make the implementation boundary explicit for both humans and agents: what must be true, what architectural rules must be respected, which repository owns which part, what contracts connect repositories, and what must not be implemented in the current change.
 
 Write tools are intentionally constrained:
 
@@ -223,7 +227,90 @@ Dry-run example:
     "problem": "Support needs a reliable audit trail for customer cancellation actions.",
     "businessGoal": "Improve operational traceability and reduce manual investigation time.",
     "affectedRepositories": [
-      "booking-api"
+      "booking-api",
+      "booking-web"
+    ],
+    "functionalRequirements": [
+      {
+        "id": "FR-001",
+        "description": "Persist a cancellation audit event whenever a customer cancels booking items."
+      },
+      {
+        "id": "FR-002",
+        "description": "Show the cancellation audit status in the booking UI."
+      }
+    ],
+    "acceptanceCriteria": [
+      {
+        "id": "AC-001",
+        "description": "Every cancellation action is recorded with actor, timestamp, booking id, and affected item ids."
+      },
+      {
+        "id": "AC-002",
+        "description": "The UI confirms that the cancellation audit entry was recorded."
+      }
+    ],
+    "repositoryChanges": [
+      {
+        "repositoryId": "booking-api",
+        "role": "backend",
+        "summary": "Record cancellation audit entries and expose audit status to the UI.",
+        "requirements": [
+          "FR-001"
+        ],
+        "acceptanceCriteria": [
+          "AC-001"
+        ],
+        "contractsProvided": [
+          "REST GET /bookings/{id}/cancellation-audit"
+        ],
+        "contractsConsumed": [],
+        "outOfScope": [
+          "Do not change refund calculation rules."
+        ]
+      },
+      {
+        "repositoryId": "booking-web",
+        "role": "frontend",
+        "summary": "Display cancellation audit status in the booking details screen.",
+        "requirements": [
+          "FR-002"
+        ],
+        "acceptanceCriteria": [
+          "AC-002"
+        ],
+        "contractsProvided": [],
+        "contractsConsumed": [
+          "REST GET /bookings/{id}/cancellation-audit"
+        ],
+        "outOfScope": []
+      }
+    ],
+    "dryRun": true
+  }
+}
+```
+
+```json
+{
+  "name": "upsert_spec_repository_change",
+  "arguments": {
+    "specId": "SPEC-002",
+    "repositoryId": "booking-api",
+    "role": "backend",
+    "summary": "Record cancellation audit entries and expose audit status to the UI.",
+    "requirements": [
+      "FR-001"
+    ],
+    "acceptanceCriteria": [
+      "AC-001"
+    ],
+    "contractsProvided": [
+      "REST GET /bookings/{id}/cancellation-audit"
+    ],
+    "contractsConsumed": [],
+    "outOfScope": [
+      "Do not change refund calculation rules."
     ],
     "dryRun": true
   }
@@ -268,6 +355,16 @@ Spec enrichment examples:
 
 ```json
 {
+  "name": "validate_spec_repository_coverage",
+  "arguments": {
+    "specId": "SPEC-002",
+    "strict": true
+  }
+}
+```
+
+```json
+{
   "name": "validate_workspace",
   "arguments": {
     "strict": false
@@ -282,9 +379,11 @@ Example agent workflow:
 3. Add requirements with `upsert_spec_requirement`.
 4. Add acceptance criteria with `upsert_spec_acceptance_criterion`.
 5. Add constraints with `upsert_spec_constraint`.
-6. Add boundaries with `add_spec_out_of_scope_item`.
-7. Run `validate_workspace`.
-8. Review the Git diff before committing shared `.archcontext` files.
+6. Add repository-scoped plans with `upsert_spec_repository_change`.
+7. Add boundaries with `add_spec_out_of_scope_item`.
+8. Run `validate_spec_repository_coverage`.
+9. Run `validate_workspace`.
+10. Review the Git diff before committing shared `.archcontext` files.
 
 ## MCP surface
 
@@ -306,6 +405,8 @@ Tools:
 - `search_context`
 - `get_spec_context`
 - `get_implementation_context_for_spec`
+- `get_repository_implementation_context_for_spec`
+- `resolve_repository_by_path`
 - `validate_spec_completeness`
 - `list_active_specs`
 - `upsert_repository`
@@ -313,7 +414,9 @@ Tools:
 - `upsert_spec_requirement`
 - `upsert_spec_acceptance_criterion`
 - `upsert_spec_constraint`
+- `upsert_spec_repository_change`
 - `add_spec_out_of_scope_item`
+- `validate_spec_repository_coverage`
 - `validate_workspace`
 
 Prompts:
