@@ -54,6 +54,8 @@ class ArchContextMcpServerTest {
             "search_context",
             "get_spec_context",
             "get_implementation_context_for_spec",
+            "get_repository_implementation_context_for_spec",
+            "resolve_repository_by_path",
             "validate_spec_completeness",
             "list_active_specs",
             "upsert_repository",
@@ -62,7 +64,9 @@ class ArchContextMcpServerTest {
             "upsert_spec_acceptance_criterion",
             "add_spec_out_of_scope_item",
             "upsert_spec_constraint",
-            "validate_workspace"),
+            "upsert_spec_repository_change",
+            "validate_workspace",
+            "validate_spec_repository_coverage"),
         tools.keySet());
 
     assertStrictNoArgSchema(tools.get("get_solution_context"));
@@ -74,6 +78,9 @@ class ArchContextMcpServerTest {
     assertProperty(tools.get("search_context"), "types");
     assertRequired(tools.get("get_implementation_context_for_spec"), "specId");
     assertProperty(tools.get("get_implementation_context_for_spec"), "repositoryId");
+    assertRequired(tools.get("get_repository_implementation_context_for_spec"), "specId");
+    assertRequired(tools.get("get_repository_implementation_context_for_spec"), "repositoryId");
+    assertRequired(tools.get("resolve_repository_by_path"), "path");
     assertRequired(tools.get("upsert_repository"), "id");
     assertRequired(tools.get("upsert_repository"), "name");
     assertRequired(tools.get("upsert_repository"), "type");
@@ -85,6 +92,7 @@ class ArchContextMcpServerTest {
     assertRequired(tools.get("create_spec"), "owner");
     assertRequired(tools.get("create_spec"), "problem");
     assertRequired(tools.get("create_spec"), "businessGoal");
+    assertProperty(tools.get("create_spec"), "repositoryChanges");
     assertProperty(tools.get("create_spec"), "dryRun");
     assertRequired(tools.get("upsert_spec_requirement"), "specId");
     assertRequired(tools.get("upsert_spec_requirement"), "requirementType");
@@ -102,7 +110,18 @@ class ArchContextMcpServerTest {
     assertRequired(tools.get("upsert_spec_constraint"), "description");
     assertProperty(tools.get("upsert_spec_constraint"), "title");
     assertProperty(tools.get("upsert_spec_constraint"), "dryRun");
+    assertRequired(tools.get("upsert_spec_repository_change"), "specId");
+    assertRequired(tools.get("upsert_spec_repository_change"), "repositoryId");
+    assertRequired(tools.get("upsert_spec_repository_change"), "summary");
+    assertProperty(tools.get("upsert_spec_repository_change"), "requirements");
+    assertProperty(tools.get("upsert_spec_repository_change"), "acceptanceCriteria");
+    assertProperty(tools.get("upsert_spec_repository_change"), "contractsProvided");
+    assertProperty(tools.get("upsert_spec_repository_change"), "contractsConsumed");
+    assertProperty(tools.get("upsert_spec_repository_change"), "outOfScope");
+    assertProperty(tools.get("upsert_spec_repository_change"), "dryRun");
     assertProperty(tools.get("validate_workspace"), "strict");
+    assertRequired(tools.get("validate_spec_repository_coverage"), "specId");
+    assertProperty(tools.get("validate_spec_repository_coverage"), "strict");
   }
 
   @Test

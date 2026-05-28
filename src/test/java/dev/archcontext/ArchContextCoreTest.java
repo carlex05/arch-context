@@ -59,6 +59,17 @@ class ArchContextCoreTest {
     assertEquals("ADR-001", ctx.relatedAdrs().getFirst().id());
     assertEquals("booking-api", ctx.affectedRepositories().getFirst().id());
     assertEquals("java-backend-guidelines", ctx.applicableGuidelines().getFirst().id());
+    assertEquals("CON-001", ctx.structuredConstraints().getFirst().id());
+    RepositoryImplementationContext repoCtx =
+        m.getRepositoryImplementationContextForSpec("SPEC-001", "booking-api");
+    assertEquals("booking-api", repoCtx.repository().id());
+    assertEquals("FR-001", repoCtx.applicableFunctionalRequirements().getFirst().id());
+    assertTrue(repoCtx.applicableNonFunctionalRequirements().isEmpty());
+    assertEquals("AC-001", repoCtx.applicableAcceptanceCriteria().getFirst().id());
+    assertEquals(
+        "REST POST /bookings/{id}/cancel",
+        repoCtx.repositoryChange().contractsProvided().getFirst());
+    assertEquals("booking-api", m.resolveRepositoryByPath("/tmp/booking-api/src/main").id());
     assertTrue(m.validateSpecCompleteness("SPEC-001").missingSections().isEmpty());
   }
 
@@ -126,8 +137,18 @@ class ArchContextCoreTest {
             + "  acceptanceCriteria:\n"
             + "    - id: AC-001\n"
             + "      description: Remaining items stay active.\n"
-            + "  constraints:\n"
-            + "    - Booking API must not directly access payment database tables.\n"
+            + "  structuredConstraints:\n"
+            + "    - id: CON-001\n"
+            + "      title: Payment ownership\n"
+            + "      description: Booking API must not directly access payment database tables.\n"
+            + "  repositoryChanges:\n"
+            + "    - repositoryId: booking-api\n"
+            + "      role: backend\n"
+            + "      summary: Add backend cancellation behavior.\n"
+            + "      requirements: [FR-001]\n"
+            + "      acceptanceCriteria: [AC-001]\n"
+            + "      contractsProvided:\n"
+            + "        - REST POST /bookings/{id}/cancel\n"
             + "  relatedAdrs: [ADR-001]\n");
     Files.writeString(
         ac.resolve("adrs/ADR-001.yaml"),

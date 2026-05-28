@@ -140,6 +140,23 @@ public class YamlWorkspaceWriter {
     return validator.validateWorkspace(root, strict);
   }
 
+  public WriteValidation validateSpecRepositoryCoverage(String specId, boolean strict) {
+    try {
+      SpecFile specFile = findSpec(specId);
+      if (specFile == null) {
+        return new WriteValidation(List.of("Unknown specId: " + specId), List.of());
+      }
+      WriteValidation validation = validator.validateSpec(root, specFile.document().spec);
+      WriteValidation coverage =
+          validator.validateSpecRepositoryCoverage(root, specFile.document().spec, strict);
+      return new WriteValidation(
+          concat(validation.errors(), coverage.errors()),
+          concat(validation.warnings(), coverage.warnings()));
+    } catch (IOException e) {
+      return new WriteValidation(List.of(e.getMessage()), List.of());
+    }
+  }
+
   public void validateKnownWriteTarget(Path target) {
     validator.validateKnownWriteTarget(root, target);
   }
@@ -410,6 +427,12 @@ public class YamlWorkspaceWriter {
   private List<String> append(List<String> values, String value) {
     List<String> out = new ArrayList<>(values == null ? List.of() : values);
     out.add(value);
+    return out;
+  }
+
+  private List<String> concat(List<String> first, List<String> second) {
+    List<String> out = new ArrayList<>(first == null ? List.of() : first);
+    out.addAll(second == null ? List.of() : second);
     return out;
   }
 

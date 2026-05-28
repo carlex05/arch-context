@@ -143,6 +143,28 @@ public class ArchContextMcpServer {
                 svc.getImplementationContextForSpec(
                     requiredString(args, "specId"), optionalString(args, "repositoryId"))),
         tool(
+            "get_repository_implementation_context_for_spec",
+            "Return repository-scoped implementation context for one spec and repository,"
+                + " including local requirements, acceptance criteria, contracts, out-of-scope"
+                + " items, other affected repositories, ADRs, and guidelines.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "repositoryId",
+                    stringProperty("Repository id")),
+                "specId",
+                "repositoryId"),
+            args ->
+                svc.getRepositoryImplementationContextForSpec(
+                    requiredString(args, "specId"), requiredString(args, "repositoryId"))),
+        tool(
+            "resolve_repository_by_path",
+            "Resolve a local filesystem path to the ArchContext repository definition whose"
+                + " resolved path contains it.",
+            strictObjectSchema(Map.of("path", stringProperty("Local filesystem path")), "path"),
+            args -> svc.resolveRepositoryByPath(requiredString(args, "path"))),
+        tool(
             "validate_spec_completeness",
             "Check whether a spec has the minimum sections needed for implementation planning.",
             strictObjectSchema(Map.of("specId", stringProperty("Spec id")), "specId"),
@@ -199,6 +221,7 @@ public class ArchContextMcpServer {
                     Map.entry("constraints", arrayProperty("Structured constraints")),
                     Map.entry("outOfScope", arrayProperty("Out-of-scope items")),
                     Map.entry("openQuestions", arrayProperty("Open questions")),
+                    Map.entry("repositoryChanges", arrayProperty("Repository-scoped changes")),
                     Map.entry("relatedAdrs", stringArrayProperty("Related ADR ids")),
                     Map.entry("dryRun", booleanProperty("Validate and preview without writing"))),
                 "id",
@@ -302,13 +325,61 @@ public class ArchContextMcpServer {
                         requiredString(args, "description")),
                     bool(args.get("dryRun")))),
         tool(
+            "upsert_spec_repository_change",
+            "Add or update the repository-scoped implementation plan for one affected repository"
+                + " in an existing spec YAML.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "repositoryId",
+                    stringProperty("Affected repository id"),
+                    "role",
+                    stringProperty("Repository role in this change"),
+                    "summary",
+                    stringProperty("Repository-specific implementation summary"),
+                    "requirements",
+                    stringArrayProperty("Requirement ids assigned to this repository"),
+                    "acceptanceCriteria",
+                    stringArrayProperty("Acceptance criterion ids assigned to this repository"),
+                    "contractsProvided",
+                    stringArrayProperty("Contracts this repository provides"),
+                    "contractsConsumed",
+                    stringArrayProperty("Contracts this repository consumes"),
+                    "outOfScope",
+                    stringArrayProperty("Repository-specific out-of-scope boundaries"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "specId",
+                "repositoryId",
+                "summary"),
+            args ->
+                writer.upsertSpecRepositoryChange(
+                    requiredString(args, "specId"),
+                    repositoryChange(args),
+                    bool(args.get("dryRun")))),
+        tool(
             "validate_workspace",
             "Validate repository references, component references, active spec readiness, related"
                 + " ADR references, and supported schema versions without writing files.",
             strictObjectSchema(
                 Map.of("strict", booleanProperty("Treat warnings such as missing ADRs as errors")),
                 List.of()),
-            args -> writer.validateWorkspace(bool(args.get("strict")))));
+            args -> writer.validateWorkspace(bool(args.get("strict")))),
+        tool(
+            "validate_spec_repository_coverage",
+            "Validate repositoryChanges coverage for one spec, including affected repositories,"
+                + " assigned requirements, and assigned acceptance criteria.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "strict",
+                    booleanProperty("Treat coverage warnings as errors")),
+                "specId"),
+            args ->
+                writer.validateSpecRepositoryCoverage(
+                    requiredString(args, "specId"), bool(args.get("strict")))));
   }
 
   List<McpServerFeatures.SyncPromptSpecification> promptSpecifications() {
@@ -506,8 +577,21 @@ public class ArchContextMcpServer {
         list(args.get("affectedComponents"), ComponentRef.class),
         list(args.get("outOfScope"), OutOfScopeItem.class),
         list(args.get("openQuestions"), OpenQuestion.class),
+        list(args.get("repositoryChanges"), RepositoryChange.class),
         stringList(args.get("relatedAdrs")),
         null);
+  }
+
+  private static RepositoryChange repositoryChange(Map<String, Object> args) {
+    return new RepositoryChange(
+        requiredString(args, "repositoryId"),
+        optionalString(args, "role"),
+        requiredString(args, "summary"),
+        stringList(args.get("requirements")),
+        stringList(args.get("acceptanceCriteria")),
+        stringList(args.get("contractsProvided")),
+        stringList(args.get("contractsConsumed")),
+        stringList(args.get("outOfScope")));
   }
 
   private static <T> List<T> list(Object value, Class<T> type) {

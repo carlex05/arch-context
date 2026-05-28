@@ -6,10 +6,12 @@ import java.util.*;
 import java.util.stream.*;
 
 public class McpContextService {
+  private final Path root;
   private final ContextLoaders l;
   private final SearchService search;
 
   public McpContextService(Path root) {
+    this.root = root.toAbsolutePath().normalize();
     l = new ContextLoaders(root);
     search = new SearchService(root);
   }
@@ -94,6 +96,72 @@ public class McpContextService {
         gs);
   }
 
+  public RepositoryImplementationContext getRepositoryImplementationContextForSpec(
+      String specId, String repoId) {
+    Spec spec = getSpecContext(specId);
+    RepositoryDefinition repository =
+        l.repository(repoId)
+            .orElseThrow(() -> new IllegalArgumentException("Unknown repositoryId: " + repoId));
+    RepositoryChange repositoryChange =
+        nvl(spec.repositoryChanges()).stream()
+            .filter(c -> repoId.equals(c.repositoryId()))
+            .findFirst()
+            .orElse(null);
+    Set<String> requirementIds =
+        repositoryChange == null ? null : new LinkedHashSet<>(nvl(repositoryChange.requirements()));
+    Set<String> acceptanceCriterionIds =
+        repositoryChange == null
+            ? null
+            : new LinkedHashSet<>(nvl(repositoryChange.acceptanceCriteria()));
+    List<RepositoryDefinition> otherAffectedRepositories =
+        l.repositories().stream()
+            .filter(r -> nvl(spec.affectedRepositories()).contains(r.id()))
+            .filter(r -> !r.id().equals(repoId))
+            .toList();
+    List<Adr> adrs =
+        l.adrs().stream()
+            .filter(
+                a ->
+                    nvl(spec.relatedAdrs()).contains(a.id())
+                        || nvl(a.relatedSpecs()).contains(spec.id()))
+            .toList();
+    return new RepositoryImplementationContext(
+        spec,
+        repository,
+        repositoryChange,
+        otherAffectedRepositories,
+        filterRequirements(spec.functionalRequirements(), requirementIds),
+        filterRequirements(spec.nonFunctionalRequirements(), requirementIds),
+        filterAcceptanceCriteria(spec.acceptanceCriteria(), acceptanceCriterionIds),
+        nvl(spec.constraints()),
+        nvl(spec.structuredConstraints()),
+        adrs,
+        applicableGuidelines(repository));
+  }
+
+  public RepositoryDefinition resolveRepositoryByPath(String rawPath) {
+    if (rawPath == null || rawPath.isBlank()) {
+      throw new IllegalArgumentException("Missing required argument: path");
+    }
+    Path target = Path.of(rawPath);
+    target = (target.isAbsolute() ? target : root.resolve(target)).toAbsolutePath().normalize();
+    RepositoryDefinition match = null;
+    int matchLength = -1;
+    for (RepositoryDefinition repository : l.repositories()) {
+      if (repository.path() == null || repository.path().isBlank()) continue;
+      Path repositoryPath = Path.of(repository.path()).toAbsolutePath().normalize();
+      if ((target.equals(repositoryPath) || target.startsWith(repositoryPath))
+          && repositoryPath.getNameCount() > matchLength) {
+        match = repository;
+        matchLength = repositoryPath.getNameCount();
+      }
+    }
+    if (match == null) {
+      throw new IllegalArgumentException("No repository found for path: " + rawPath);
+    }
+    return match;
+  }
+
   public ValidationResult validateSpecCompleteness(String id) {
     Spec s = getSpecContext(id);
     List<String> m = new ArrayList<>(), w = new ArrayList<>(), sug = new ArrayList<>();
@@ -150,6 +218,18 @@ public class McpContextService {
                           || nvl(a.repositoryTypes()).contains(r.type()));
             })
         .toList();
+  }
+
+  private List<Requirement> filterRequirements(
+      List<Requirement> requirements, Set<String> applicableIds) {
+    if (applicableIds == null) return nvl(requirements);
+    return nvl(requirements).stream().filter(r -> applicableIds.contains(r.id())).toList();
+  }
+
+  private List<AcceptanceCriterion> filterAcceptanceCriteria(
+      List<AcceptanceCriterion> acceptanceCriteria, Set<String> applicableIds) {
+    if (applicableIds == null) return nvl(acceptanceCriteria);
+    return nvl(acceptanceCriteria).stream().filter(c -> applicableIds.contains(c.id())).toList();
   }
 
   private static boolean blank(String s) {
