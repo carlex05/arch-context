@@ -139,6 +139,37 @@ public class McpContextService {
         applicableGuidelines(repository));
   }
 
+  public AgentBriefing getAgentBriefingForSpec(String specId, String repoId) {
+    RepositoryImplementationContext repositoryContext =
+        getRepositoryImplementationContextForSpec(specId, repoId);
+    List<Principle> principles =
+        l.principles().stream()
+            .filter(
+                p ->
+                    nvl(p.appliesTo()).isEmpty()
+                        || nvl(p.appliesTo()).contains("*")
+                        || nvl(p.appliesTo()).contains(repoId))
+            .toList();
+    return new AgentBriefing(
+        l.solution(),
+        principles,
+        l.solution() == null ? List.of() : l.solution().glossary(),
+        repositoryContext.spec(),
+        repositoryContext.repository(),
+        repositoryContext.repositoryChange(),
+        repositoryContext.otherAffectedRepositories(),
+        nvl(repositoryContext.spec().affectedComponents()).stream()
+            .filter(c -> repoId.equals(c.repositoryId()))
+            .toList(),
+        repositoryContext.applicableFunctionalRequirements(),
+        repositoryContext.applicableNonFunctionalRequirements(),
+        repositoryContext.applicableAcceptanceCriteria(),
+        repositoryContext.constraints(),
+        repositoryContext.structuredConstraints(),
+        repositoryContext.relatedAdrs(),
+        repositoryContext.applicableGuidelines());
+  }
+
   public RepositoryDefinition resolveRepositoryByPath(String rawPath) {
     if (rawPath == null || rawPath.isBlank()) {
       throw new IllegalArgumentException("Missing required argument: path");
@@ -213,7 +244,10 @@ public class McpContextService {
             g -> {
               var a = g.appliesTo();
               return a == null
-                  || (nvl(a.languages()).isEmpty() || nvl(a.languages()).contains(r.language()))
+                  || (nvl(a.repositoryIds()).isEmpty()
+                          || nvl(a.repositoryIds()).contains("*")
+                          || nvl(a.repositoryIds()).contains(r.id()))
+                      && (nvl(a.languages()).isEmpty() || nvl(a.languages()).contains(r.language()))
                       && (nvl(a.repositoryTypes()).isEmpty()
                           || nvl(a.repositoryTypes()).contains(r.type()));
             })

@@ -49,6 +49,140 @@ class YamlWorkspaceWriterTest {
   }
 
   @Test
+  void upsertSolutionWritesPrinciplesAndGlossary() throws Exception {
+    Solution solution =
+        new Solution(
+            "front9",
+            "Front 9",
+            "Frontend workspace.",
+            "Enable autonomous delivery.",
+            List.of(new CrossCuttingConcern("i18n", "Internationalization", "Spanish specs.")),
+            List.of(new GlossaryTerm("Front_9", "Current frontend workspace.")));
+
+    WriteResult result =
+        writer.upsertSolution(
+            solution,
+            List.of(
+                new Principle(
+                    "tdd",
+                    "TDD",
+                    "Use red-green-refactor.",
+                    "Keep changes testable.",
+                    List.of("*"))),
+            false);
+
+    assertTrue(result.changed());
+    var doc = yaml.read(root.resolve(".archcontext/solution.yaml"));
+    assertEquals("Enable autonomous delivery.", doc.solution.vision());
+    assertEquals("tdd", doc.principles.getFirst().id());
+    assertEquals("Front_9", doc.solution.glossary().getFirst().term());
+  }
+
+  @Test
+  void upsertSolutionPrincipleUpdatesById() throws Exception {
+    writer.upsertSolutionPrinciple(
+        new Principle("hexagonal", "Hexagonal", "Old.", "Old rationale.", List.of("*")), false);
+
+    WriteResult result =
+        writer.upsertSolutionPrinciple(
+            new Principle(
+                "hexagonal",
+                "Hexagonal architecture",
+                "Keep domain isolated.",
+                "Ports and adapters preserve boundaries.",
+                List.of("booking-api")),
+            false);
+
+    assertTrue(result.changed());
+    var principle =
+        yaml.read(root.resolve(".archcontext/solution.yaml")).principles.stream()
+            .filter(p -> p.id().equals("hexagonal"))
+            .findFirst()
+            .orElseThrow();
+    assertEquals("Hexagonal architecture", principle.title());
+    assertEquals(List.of("booking-api"), principle.appliesTo());
+  }
+
+  @Test
+  void upsertSolutionGlossaryTermUpdatesByTerm() throws Exception {
+    writer.upsertSolutionGlossaryTerm(new GlossaryTerm("dbt_test", "Old."), false);
+
+    WriteResult result =
+        writer.upsertSolutionGlossaryTerm(
+            new GlossaryTerm("dbt_test", "Database test.", List.of("DBT"), List.of("qc_type")),
+            false);
+
+    assertTrue(result.changed());
+    List<GlossaryTerm> glossary = yaml.read(root.resolve(".archcontext/solution.yaml")).solution.glossary();
+    assertEquals(1, glossary.size());
+    assertEquals("Database test.", glossary.getFirst().definition());
+  }
+
+  @Test
+  void upsertRepositoryComponentAddsComponent() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+
+    WriteResult result =
+        writer.upsertRepositoryComponent(
+            "booking-api",
+            new Component(
+                "application-use-case",
+                "Application Use Case",
+                "layer",
+                "src/main/java/app/application",
+                "Application orchestration layer.",
+                List.of("RESP-001"),
+                List.of("booking-domain")),
+            false);
+
+    assertTrue(result.changed());
+    Component component =
+        yaml.read(root.resolve(".archcontext/repositories.yaml"))
+            .repositories
+            .getFirst()
+            .components()
+            .stream()
+            .filter(c -> c.id().equals("application-use-case"))
+            .findFirst()
+            .orElseThrow();
+    assertEquals("src/main/java/app/application", component.path());
+  }
+
+  @Test
+  void upsertRepositoryResponsibilityAddsResponsibility() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+
+    WriteResult result =
+        writer.upsertRepositoryResponsibility(
+            "booking-api",
+            new Responsibility("RESP-002", "Own Flyway schema migrations.", "persistence"),
+            false);
+
+    assertTrue(result.changed());
+    assertEquals(
+        "persistence",
+        yaml.read(root.resolve(".archcontext/repositories.yaml"))
+            .repositories
+            .getFirst()
+            .responsibilities()
+            .getLast()
+            .category());
+  }
+
+  @Test
+  void createGuidelineWritesGuidelineFile() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+
+    WriteResult result = writer.createGuideline(guideline("guideline-testing-be"), false);
+
+    assertTrue(result.changed());
+    Guideline guideline =
+        yaml.read(root.resolve(".archcontext/guidelines/guideline-testing-be.yaml")).guideline;
+    assertEquals("testing", guideline.category());
+    assertEquals(List.of("booking-api"), guideline.appliesTo().repositoryIds());
+  }
+
+  @Test
   void createSpecWritesUnderSpecsDirectory() throws Exception {
     writer.upsertRepository(repository("booking-api", "Booking API"), false);
 
@@ -262,6 +396,31 @@ class YamlWorkspaceWriterTest {
     Spec spec = yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec;
     assertEquals("booking-api", spec.repositoryChanges().getFirst().repositoryId());
     assertEquals(List.of("FR-001"), spec.repositoryChanges().getFirst().requirements());
+  }
+
+  @Test
+  void upsertSpecAffectedComponentAddsPathBreadcrumb() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
+
+    WriteResult result =
+        writer.upsertSpecAffectedComponent(
+            "SPEC-001",
+            new ComponentRef(
+                "booking-api",
+                null,
+                "src/main/java/BookingController.java",
+                50,
+                65,
+                "modify",
+                "Add cancellation audit status."),
+            false);
+
+    assertTrue(result.changed());
+    ComponentRef ref =
+        yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec.affectedComponents().getLast();
+    assertEquals("src/main/java/BookingController.java", ref.path());
+    assertEquals(50, ref.lineStart());
   }
 
   @Test
@@ -518,6 +677,25 @@ class YamlWorkspaceWriterTest {
                 "domain",
                 "Booking business rules.",
                 List.of("RESP-001"))));
+  }
+
+  private static Guideline guideline(String id) {
+    return new Guideline(
+        id,
+        "Backend testing guideline",
+        "testing",
+        new AppliesTo(List.of("booking-api"), List.of("java"), List.of("backend")),
+        List.of(
+            new GuidelineRule(
+                "TEST-001",
+                null,
+                "Write focused JUnit 5 tests for behavior changes.",
+                "Agents need executable guardrails.",
+                new RuleExamples(List.of("Use AssertJ assertions."), List.of("Only test mocks.")))),
+        List.of("https://junit.org"),
+        List.of(),
+        List.of(),
+        null);
   }
 
   private static Spec spec(String id, List<String> repositories) {

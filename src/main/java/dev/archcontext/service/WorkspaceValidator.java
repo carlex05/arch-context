@@ -27,6 +27,58 @@ public class WorkspaceValidator {
     return new WriteValidation(errors, warnings);
   }
 
+  public WriteValidation validateSolution(Solution solution, List<Principle> principles) {
+    List<String> errors = new ArrayList<>();
+    List<String> warnings = new ArrayList<>();
+    if (solution == null) {
+      errors.add("Solution is required.");
+      return new WriteValidation(errors, warnings);
+    }
+    if (blank(solution.id())) errors.add("Solution id is required.");
+    if (blank(solution.name())) errors.add("Solution name is required.");
+    if (blank(solution.description())) warnings.add("Solution description is missing.");
+    requireUnique(
+        nvl(principles).stream().map(Principle::id).toList(), "Duplicate principle id: ", errors);
+    requireUnique(
+        nvl(solution.crossCuttingConcerns()).stream().map(CrossCuttingConcern::id).toList(),
+        "Duplicate cross-cutting concern id: ",
+        errors);
+    requireUnique(
+        nvl(solution.glossary()).stream().map(GlossaryTerm::term).toList(),
+        "Duplicate glossary term: ",
+        errors);
+    return new WriteValidation(errors, warnings);
+  }
+
+  public WriteValidation validateGuideline(Path root, Guideline guideline) {
+    List<String> errors = new ArrayList<>();
+    List<String> warnings = new ArrayList<>();
+    if (blank(guideline.id())) errors.add("Guideline id is required.");
+    if (blank(guideline.title())) errors.add("Guideline title is required.");
+    requireUnique(
+        nvl(guideline.rules()).stream().map(GuidelineRule::id).toList(),
+        "Duplicate guideline rule id: ",
+        errors);
+    try {
+      Set<String> repositoryIds =
+          repositoryService.list(root).stream()
+              .map(RepositoryDefinition::id)
+              .collect(Collectors.toSet());
+      AppliesTo appliesTo = guideline.appliesTo();
+      if (appliesTo != null) {
+        for (String repositoryId : nvl(appliesTo.repositoryIds())) {
+          if (!"*".equals(repositoryId) && !repositoryIds.contains(repositoryId)) {
+            errors.add("Unknown guideline repository: " + repositoryId);
+          }
+        }
+      }
+    } catch (IOException e) {
+      errors.add("Cannot read repository definitions: " + e.getMessage());
+    }
+    if (nvl(guideline.rules()).isEmpty()) warnings.add("Guideline has no rules: " + guideline.id());
+    return new WriteValidation(errors, warnings);
+  }
+
   public WriteValidation validateWorkspace(Path root, boolean strict) {
     List<String> errors = new ArrayList<>();
     List<String> warnings = new ArrayList<>();
@@ -215,9 +267,12 @@ public class WorkspaceValidator {
     }
 
     Path repositoriesFile = archContextDir.resolve("repositories.yaml").normalize();
+    Path solutionFile = archContextDir.resolve("solution.yaml").normalize();
     Path specsDir = archContextDir.resolve("specs").normalize();
     Path adrsDir = archContextDir.resolve("adrs").normalize();
+    Path guidelinesDir = archContextDir.resolve("guidelines").normalize();
     boolean knownRepositoriesFile = normalizedTarget.equals(repositoriesFile);
+    boolean knownSolutionFile = normalizedTarget.equals(solutionFile);
     boolean knownSpecFile =
         normalizedTarget.getParent() != null
             && normalizedTarget.getParent().normalize().equals(specsDir)
@@ -226,7 +281,15 @@ public class WorkspaceValidator {
         normalizedTarget.getParent() != null
             && normalizedTarget.getParent().normalize().equals(adrsDir)
             && normalizedTarget.getFileName().toString().endsWith(".yaml");
-    if (!knownRepositoriesFile && !knownSpecFile && !knownAdrFile) {
+    boolean knownGuidelineFile =
+        normalizedTarget.getParent() != null
+            && normalizedTarget.getParent().normalize().equals(guidelinesDir)
+            && normalizedTarget.getFileName().toString().endsWith(".yaml");
+    if (!knownRepositoriesFile
+        && !knownSolutionFile
+        && !knownSpecFile
+        && !knownAdrFile
+        && !knownGuidelineFile) {
       throw new IllegalArgumentException("Unsupported ArchContext write target: " + target);
     }
   }
@@ -248,6 +311,7 @@ public class WorkspaceValidator {
         errors.add("Unknown component repository: " + ref.repositoryId());
         continue;
       }
+      if (blank(ref.componentId()) && !blank(ref.path())) continue;
       boolean componentExists =
           nvl(repository.components()).stream().anyMatch(c -> c.id().equals(ref.componentId()));
       if (!componentExists) {
@@ -316,6 +380,14 @@ public class WorkspaceValidator {
       boolean strict, List<String> errors, List<String> warnings, String message) {
     if (strict) errors.add(message);
     else warnings.add(message);
+  }
+
+  private void requireUnique(List<String> values, String messagePrefix, List<String> errors) {
+    Set<String> seen = new LinkedHashSet<>();
+    for (String value : nvl(values)) {
+      if (blank(value)) continue;
+      if (!seen.add(value)) errors.add(messagePrefix + value);
+    }
   }
 
   private void validateSchemaVersions(

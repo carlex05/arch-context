@@ -11,6 +11,7 @@ import java.util.*;
 class ContextLoaders {
   final Path root;
   final YamlMapper yaml = new YamlMapper();
+  final RepositoryService repositoryService = new RepositoryService();
 
   ContextLoaders(Path root) {
     this.root = root;
@@ -21,6 +22,14 @@ class ContextLoaders {
   }
 
   Solution solution() {
+    Path path = root.resolve(".archcontext/solution.yaml");
+    if (Files.exists(path)) {
+      try {
+        return yaml.read(path).solution;
+      } catch (Exception e) {
+        throw new IllegalStateException(e);
+      }
+    }
     try (Connection c = c();
         Statement s = c.createStatement();
         ResultSet r = s.executeQuery("SELECT id,name,description FROM solution LIMIT 1")) {
@@ -31,6 +40,15 @@ class ContextLoaders {
   }
 
   List<Principle> principles() {
+    Path path = root.resolve(".archcontext/solution.yaml");
+    if (Files.exists(path)) {
+      try {
+        List<Principle> principles = yaml.read(path).principles;
+        return principles == null ? List.of() : principles;
+      } catch (Exception e) {
+        throw new IllegalStateException(e);
+      }
+    }
     List<Principle> l = new ArrayList<>();
     try (Connection c = c();
         Statement s = c.createStatement();
@@ -43,28 +61,27 @@ class ContextLoaders {
   }
 
   List<RepositoryDefinition> repositories() {
-    List<RepositoryDefinition> l = new ArrayList<>();
-    try (Connection c = c();
-        Statement s = c.createStatement();
-        ResultSet r =
-            s.executeQuery(
-                "SELECT"
-                    + " id,name,COALESCE(resolved_path,path),type,language,bounded_context,description"
-                    + " FROM repositories")) {
-      while (r.next())
-        l.add(
-            new RepositoryDefinition(
-                r.getString(1),
-                r.getString(2),
-                r.getString(3),
-                r.getString(4),
-                r.getString(5),
-                r.getString(6),
-                r.getString(7)));
+    try {
+      Map<String, LocalRepositoryOverride> overrides = repositoryService.localOverrides(root);
+      return repositoryService.list(root).stream()
+          .map(
+              r -> {
+                Path resolved = repositoryService.resolvePath(root, r, overrides);
+                return new RepositoryDefinition(
+                    r.id(),
+                    r.name(),
+                    resolved == null ? r.path() : resolved.toString(),
+                    r.type(),
+                    r.language(),
+                    r.boundedContext(),
+                    r.description(),
+                    r.responsibilities(),
+                    r.components());
+              })
+          .toList();
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }
-    return l;
   }
 
   Optional<RepositoryDefinition> repository(String id) {
@@ -158,6 +175,20 @@ class ContextLoaders {
   }
 
   List<Guideline> guidelines() {
+    Path dir = root.resolve(".archcontext/guidelines");
+    if (Files.isDirectory(dir)) {
+      try (var paths = Files.list(dir)) {
+        List<Guideline> guidelines = new ArrayList<>();
+        for (Path path :
+            paths.filter(p -> p.getFileName().toString().endsWith(".yaml")).sorted().toList()) {
+          var doc = yaml.read(path);
+          if (doc.guideline != null) guidelines.add(doc.guideline);
+        }
+        return guidelines;
+      } catch (Exception e) {
+        throw new IllegalStateException(e);
+      }
+    }
     List<Guideline> l = new ArrayList<>();
     try (Connection c = c();
         Statement s = c.createStatement();

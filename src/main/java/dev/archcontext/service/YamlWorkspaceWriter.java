@@ -54,6 +54,163 @@ public class YamlWorkspaceWriter {
     }
   }
 
+  public WriteResult upsertSolution(
+      Solution solution, List<Principle> principles, boolean dryRun) {
+    Path target = solutionFile();
+    validator.validateKnownWriteTarget(root, target);
+    WriteValidation validation = validator.validateSolution(solution, principles);
+    if (!validation.errors().isEmpty()) {
+      return result(false, dryRun, target, "Solution was not written.", validation, solution);
+    }
+    try {
+      YamlDocuments doc = readOrNew(target);
+      Solution existingSolution = doc.solution;
+      List<Principle> safePrinciples = new ArrayList<>(nvl(principles));
+      boolean changed = !Objects.equals(existingSolution, solution) || !nvl(doc.principles).equals(safePrinciples);
+      doc.schemaVersion = "1.1";
+      doc.solution = solution;
+      doc.principles = safePrinciples;
+      if (changed && !dryRun) {
+        writeAtomically(target, doc);
+        reindex();
+      }
+      return result(changed, dryRun, target, "Updated solution context.", validation, solution);
+    } catch (IOException e) {
+      return result(
+          false,
+          dryRun,
+          target,
+          "Solution was not written.",
+          new WriteValidation(List.of(e.getMessage()), validation.warnings()),
+          solution);
+    }
+  }
+
+  public WriteResult upsertSolutionPrinciple(Principle principle, boolean dryRun) {
+    Path target = solutionFile();
+    validator.validateKnownWriteTarget(root, target);
+    try {
+      YamlDocuments doc = readOrNew(target);
+      if (doc.solution == null) {
+        doc.solution = new Solution("archcontext-solution", "ArchContext Solution", null);
+      }
+      List<Principle> principles = new ArrayList<>(nvl(doc.principles));
+      principles.removeIf(p -> p.id().equals(principle.id()));
+      principles.add(principle);
+      WriteValidation validation = validator.validateSolution(doc.solution, principles);
+      if (!validation.errors().isEmpty()) {
+        return result(false, dryRun, target, "Principle was not written.", validation, principle);
+      }
+      boolean changed = !nvl(doc.principles).equals(principles);
+      doc.schemaVersion = "1.1";
+      doc.principles = principles;
+      if (changed && !dryRun) {
+        writeAtomically(target, doc);
+        reindex();
+      }
+      return result(changed, dryRun, target, "Upserted principle " + principle.id() + ".", validation, principle);
+    } catch (IOException e) {
+      return result(
+          false,
+          dryRun,
+          target,
+          "Principle was not written.",
+          new WriteValidation(List.of(e.getMessage()), List.of()),
+          principle);
+    }
+  }
+
+  public WriteResult upsertSolutionGlossaryTerm(GlossaryTerm term, boolean dryRun) {
+    Path target = solutionFile();
+    validator.validateKnownWriteTarget(root, target);
+    try {
+      YamlDocuments doc = readOrNew(target);
+      Solution current =
+          doc.solution == null
+              ? new Solution("archcontext-solution", "ArchContext Solution", null)
+              : doc.solution;
+      List<GlossaryTerm> glossary = new ArrayList<>(nvl(current.glossary()));
+      glossary.removeIf(t -> t.term().equalsIgnoreCase(term.term()));
+      glossary.add(term);
+      Solution updated =
+          new Solution(
+              current.id(),
+              current.name(),
+              current.description(),
+              current.vision(),
+              current.crossCuttingConcerns(),
+              glossary);
+      WriteValidation validation = validator.validateSolution(updated, doc.principles);
+      if (!validation.errors().isEmpty()) {
+        return result(false, dryRun, target, "Glossary term was not written.", validation, term);
+      }
+      boolean changed = !updated.equals(current);
+      doc.schemaVersion = "1.1";
+      doc.solution = updated;
+      if (changed && !dryRun) {
+        writeAtomically(target, doc);
+        reindex();
+      }
+      return result(changed, dryRun, target, "Upserted glossary term " + term.term() + ".", validation, term);
+    } catch (IOException e) {
+      return result(
+          false,
+          dryRun,
+          target,
+          "Glossary term was not written.",
+          new WriteValidation(List.of(e.getMessage()), List.of()),
+          term);
+    }
+  }
+
+  public WriteResult upsertRepositoryComponent(
+      String repositoryId, Component component, boolean dryRun) {
+    return updateRepository(
+        repositoryId,
+        dryRun,
+        "Repository component was not written.",
+        repository -> {
+          List<Component> components = new ArrayList<>(nvl(repository.components()));
+          components.removeIf(c -> c.id().equals(component.id()));
+          components.add(component);
+          return new RepositoryDefinition(
+              repository.id(),
+              repository.name(),
+              repository.path(),
+              repository.type(),
+              repository.language(),
+              repository.boundedContext(),
+              repository.description(),
+              repository.responsibilities(),
+              components);
+        },
+        "Upserted repository component " + component.id() + ".");
+  }
+
+  public WriteResult upsertRepositoryResponsibility(
+      String repositoryId, Responsibility responsibility, boolean dryRun) {
+    return updateRepository(
+        repositoryId,
+        dryRun,
+        "Repository responsibility was not written.",
+        repository -> {
+          List<Responsibility> responsibilities = new ArrayList<>(nvl(repository.responsibilities()));
+          responsibilities.removeIf(r -> r.id().equals(responsibility.id()));
+          responsibilities.add(responsibility);
+          return new RepositoryDefinition(
+              repository.id(),
+              repository.name(),
+              repository.path(),
+              repository.type(),
+              repository.language(),
+              repository.boundedContext(),
+              repository.description(),
+              responsibilities,
+              repository.components());
+        },
+        "Upserted repository responsibility " + responsibility.id() + ".");
+  }
+
   public WriteResult createSpec(Spec spec, boolean dryRun) {
     Path target = specFile(spec);
     validator.validateKnownWriteTarget(root, target);
@@ -154,6 +311,71 @@ public class YamlWorkspaceWriter {
     }
   }
 
+  public WriteResult createGuideline(Guideline guideline, boolean dryRun) {
+    Path target = guidelineFile(guideline.id());
+    validator.validateKnownWriteTarget(root, target);
+    WriteValidation validation = validator.validateGuideline(root, guideline);
+    if (Files.exists(target)) {
+      validation =
+          new WriteValidation(
+              append(validation.errors(), "Guideline already exists: " + relative(target)),
+              validation.warnings());
+    }
+    if (!validation.errors().isEmpty()) {
+      return result(false, dryRun, target, "Guideline was not written.", validation, guideline);
+    }
+    try {
+      YamlDocuments doc = new YamlDocuments();
+      doc.schemaVersion = "1.1";
+      doc.guideline = guideline;
+      if (!dryRun) {
+        writeAtomically(target, doc);
+        reindex();
+      }
+      return result(
+          true, dryRun, target, "Created guideline " + guideline.id() + ".", validation, guideline);
+    } catch (IOException e) {
+      return result(
+          false,
+          dryRun,
+          target,
+          "Guideline was not written.",
+          new WriteValidation(List.of(e.getMessage()), validation.warnings()),
+          guideline);
+    }
+  }
+
+  public WriteResult upsertGuideline(Guideline guideline, boolean dryRun) {
+    Path target = findGuidelinePath(guideline.id());
+    if (target == null) target = guidelineFile(guideline.id());
+    validator.validateKnownWriteTarget(root, target);
+    WriteValidation validation = validator.validateGuideline(root, guideline);
+    if (!validation.errors().isEmpty()) {
+      return result(false, dryRun, target, "Guideline was not written.", validation, guideline);
+    }
+    try {
+      YamlDocuments doc = Files.exists(target) ? yaml.read(target) : new YamlDocuments();
+      Guideline existing = doc.guideline;
+      boolean changed = existing == null || !existing.equals(guideline);
+      doc.schemaVersion = "1.1";
+      doc.guideline = guideline;
+      if (changed && !dryRun) {
+        writeAtomically(target, doc);
+        reindex();
+      }
+      String action = existing == null ? "Created guideline " : "Updated guideline ";
+      return result(changed, dryRun, target, action + guideline.id() + ".", validation, guideline);
+    } catch (IOException e) {
+      return result(
+          false,
+          dryRun,
+          target,
+          "Guideline was not written.",
+          new WriteValidation(List.of(e.getMessage()), validation.warnings()),
+          guideline);
+    }
+  }
+
   public WriteResult upsertSpecRequirement(
       String specId, String requirementType, Requirement requirement, boolean dryRun) {
     return updateSpec(
@@ -202,6 +424,16 @@ public class YamlWorkspaceWriter {
         "Upserted repository change for " + repositoryChange.repositoryId() + ".");
   }
 
+  public WriteResult upsertSpecAffectedComponent(
+      String specId, ComponentRef affectedComponent, boolean dryRun) {
+    return updateSpec(
+        specId,
+        dryRun,
+        "Affected component was not written.",
+        spec -> updateAffectedComponent(spec, affectedComponent),
+        "Upserted affected component for " + affectedComponent.repositoryId() + ".");
+  }
+
   public WriteValidation validateWorkspace(boolean strict) {
     return validator.validateWorkspace(root, strict);
   }
@@ -225,6 +457,55 @@ public class YamlWorkspaceWriter {
 
   public void validateKnownWriteTarget(Path target) {
     validator.validateKnownWriteTarget(root, target);
+  }
+
+  private WriteResult updateRepository(
+      String repositoryId,
+      boolean dryRun,
+      String failureSummary,
+      RepositoryUpdater updater,
+      String successSummary) {
+    Path target = repositoriesFile();
+    validator.validateKnownWriteTarget(root, target);
+    try {
+      YamlDocuments doc = readOrNew(target);
+      List<RepositoryDefinition> repositories = new ArrayList<>(nvl(doc.repositories));
+      Optional<RepositoryDefinition> original =
+          repositories.stream().filter(r -> r.id().equals(repositoryId)).findFirst();
+      if (original.isEmpty()) {
+        return result(
+            false,
+            dryRun,
+            target,
+            failureSummary,
+            new WriteValidation(List.of("Unknown repositoryId: " + repositoryId), List.of()),
+            null);
+      }
+      RepositoryDefinition updated = updater.update(original.get());
+      WriteValidation validation = validator.validateRepository(updated);
+      if (!validation.errors().isEmpty()) {
+        return result(false, dryRun, target, failureSummary, validation, updated);
+      }
+      repositories.removeIf(r -> r.id().equals(repositoryId));
+      repositories.add(updated);
+      boolean changed = !updated.equals(original.get());
+      doc.schemaVersion = "1.1";
+      doc.repositories = repositories;
+      if (changed && !dryRun) {
+        writeAtomically(target, doc);
+        reindex();
+      }
+      String summary = changed ? successSummary : "No changes for repository " + repositoryId + ".";
+      return result(changed, dryRun, target, summary, validation, updated);
+    } catch (IOException e) {
+      return result(
+          false,
+          dryRun,
+          target,
+          failureSummary,
+          new WriteValidation(List.of(e.getMessage()), List.of()),
+          null);
+    }
   }
 
   private WriteResult updateSpec(
@@ -399,6 +680,38 @@ public class YamlWorkspaceWriter {
         spec.sourcePath());
   }
 
+  private Spec updateAffectedComponent(Spec spec, ComponentRef affectedComponent) {
+    List<ComponentRef> affectedComponents = new ArrayList<>(nvl(spec.affectedComponents()));
+    affectedComponents.removeIf(c -> sameAffectedComponent(c, affectedComponent));
+    affectedComponents.add(affectedComponent);
+    return spec(
+        spec.id(),
+        spec.title(),
+        spec.status(),
+        spec.owner(),
+        spec.problem(),
+        spec.businessGoal(),
+        nvl(spec.affectedRepositories()),
+        nvl(spec.affectedBoundedContexts()),
+        nvl(spec.functionalRequirements()),
+        nvl(spec.nonFunctionalRequirements()),
+        nvl(spec.acceptanceCriteria()),
+        nvl(spec.constraints()),
+        nvl(spec.structuredConstraints()),
+        affectedComponents,
+        nvl(spec.outOfScope()),
+        nvl(spec.openQuestions()),
+        nvl(spec.repositoryChanges()),
+        nvl(spec.relatedAdrs()),
+        spec.sourcePath());
+  }
+
+  private boolean sameAffectedComponent(ComponentRef left, ComponentRef right) {
+    return Objects.equals(left.repositoryId(), right.repositoryId())
+        && Objects.equals(left.componentId(), right.componentId())
+        && Objects.equals(left.path(), right.path());
+  }
+
   private Spec spec(
       String id,
       String title,
@@ -471,6 +784,22 @@ public class YamlWorkspaceWriter {
     return null;
   }
 
+  private Path findGuidelinePath(String guidelineId) {
+    if (!Files.isDirectory(guidelinesDir())) return null;
+    try (var paths = Files.list(guidelinesDir())) {
+      for (Path path :
+          paths.filter(p -> p.getFileName().toString().endsWith(".yaml")).sorted().toList()) {
+        YamlDocuments doc = yaml.read(path);
+        if (doc.guideline != null && guidelineId.equals(doc.guideline.id())) {
+          return path;
+        }
+      }
+    } catch (IOException e) {
+      throw new IllegalArgumentException(e.getMessage(), e);
+    }
+    return null;
+  }
+
   private YamlDocuments readOrNew(Path path) throws IOException {
     return Files.exists(path) ? yaml.read(path) : new YamlDocuments();
   }
@@ -522,6 +851,10 @@ public class YamlWorkspaceWriter {
     return archContextDir.resolve("repositories.yaml");
   }
 
+  private Path solutionFile() {
+    return archContextDir.resolve("solution.yaml");
+  }
+
   private Path specsDir() {
     return archContextDir.resolve("specs");
   }
@@ -530,12 +863,20 @@ public class YamlWorkspaceWriter {
     return archContextDir.resolve("adrs");
   }
 
+  private Path guidelinesDir() {
+    return archContextDir.resolve("guidelines");
+  }
+
   private Path specFile(Spec spec) {
     return specsDir().resolve(slug(spec.id()) + ".yaml");
   }
 
   private Path adrFile(Adr adr) {
     return adrsDir().resolve(slug(adr.id()) + ".yaml");
+  }
+
+  private Path guidelineFile(String guidelineId) {
+    return guidelinesDir().resolve(slug(guidelineId) + ".yaml");
   }
 
   private String relative(Path path) {
@@ -556,5 +897,10 @@ public class YamlWorkspaceWriter {
   @FunctionalInterface
   private interface SpecUpdater {
     Spec update(Spec spec);
+  }
+
+  @FunctionalInterface
+  private interface RepositoryUpdater {
+    RepositoryDefinition update(RepositoryDefinition repository);
   }
 }
