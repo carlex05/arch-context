@@ -89,6 +89,7 @@ public class McpContextService {
         nvl(s.nonFunctionalRequirements()),
         nvl(s.acceptanceCriteria()),
         nvl(s.constraints()),
+        nvl(s.structuredConstraints()),
         adrs,
         gs);
   }

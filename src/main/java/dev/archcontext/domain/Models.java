@@ -63,6 +63,24 @@ public final class Models {
 
   public record OpenQuestion(String id, String question) {}
 
+  public record RepositoryChange(
+      String repositoryId,
+      String role,
+      String summary,
+      List<String> requirements,
+      List<String> acceptanceCriteria,
+      List<String> contractsProvided,
+      List<String> contractsConsumed,
+      List<String> outOfScope) {
+    public RepositoryChange {
+      requirements = requirements == null ? List.of() : requirements;
+      acceptanceCriteria = acceptanceCriteria == null ? List.of() : acceptanceCriteria;
+      contractsProvided = contractsProvided == null ? List.of() : contractsProvided;
+      contractsConsumed = contractsConsumed == null ? List.of() : contractsConsumed;
+      outOfScope = outOfScope == null ? List.of() : outOfScope;
+    }
+  }
+
   public record Spec(
       String id,
       String title,
@@ -80,6 +98,7 @@ public final class Models {
       List<ComponentRef> affectedComponents,
       List<OutOfScopeItem> outOfScope,
       List<OpenQuestion> openQuestions,
+      List<RepositoryChange> repositoryChanges,
       List<String> relatedAdrs,
       String sourcePath) {
     public Spec {
@@ -95,7 +114,49 @@ public final class Models {
       affectedComponents = affectedComponents == null ? List.of() : affectedComponents;
       outOfScope = outOfScope == null ? List.of() : outOfScope;
       openQuestions = openQuestions == null ? List.of() : openQuestions;
+      repositoryChanges = repositoryChanges == null ? List.of() : repositoryChanges;
       relatedAdrs = relatedAdrs == null ? List.of() : relatedAdrs;
+    }
+
+    public Spec(
+        String id,
+        String title,
+        String status,
+        String owner,
+        String problem,
+        String businessGoal,
+        List<String> affectedRepositories,
+        List<String> affectedBoundedContexts,
+        List<Requirement> functionalRequirements,
+        List<Requirement> nonFunctionalRequirements,
+        List<AcceptanceCriterion> acceptanceCriteria,
+        List<String> constraints,
+        List<Constraint> structuredConstraints,
+        List<ComponentRef> affectedComponents,
+        List<OutOfScopeItem> outOfScope,
+        List<OpenQuestion> openQuestions,
+        List<String> relatedAdrs,
+        String sourcePath) {
+      this(
+          id,
+          title,
+          status,
+          owner,
+          problem,
+          businessGoal,
+          affectedRepositories,
+          affectedBoundedContexts,
+          functionalRequirements,
+          nonFunctionalRequirements,
+          acceptanceCriteria,
+          constraints,
+          structuredConstraints,
+          affectedComponents,
+          outOfScope,
+          openQuestions,
+          List.of(),
+          relatedAdrs,
+          sourcePath);
     }
 
     public Spec(
@@ -126,6 +187,7 @@ public final class Models {
           nonFunctionalRequirements,
           acceptanceCriteria,
           constraints,
+          List.of(),
           List.of(),
           List.of(),
           List.of(),
@@ -201,6 +263,20 @@ public final class Models {
       List<Requirement> nonFunctionalRequirements,
       List<AcceptanceCriterion> acceptanceCriteria,
       List<String> constraints,
+      List<Constraint> structuredConstraints,
+      List<Adr> relatedAdrs,
+      List<Guideline> applicableGuidelines) {}
+
+  public record RepositoryImplementationContext(
+      Spec spec,
+      RepositoryDefinition repository,
+      RepositoryChange repositoryChange,
+      List<RepositoryDefinition> otherAffectedRepositories,
+      List<Requirement> applicableFunctionalRequirements,
+      List<Requirement> applicableNonFunctionalRequirements,
+      List<AcceptanceCriterion> applicableAcceptanceCriteria,
+      List<String> constraints,
+      List<Constraint> structuredConstraints,
       List<Adr> relatedAdrs,
       List<Guideline> applicableGuidelines) {}
 
