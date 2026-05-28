@@ -200,6 +200,8 @@ Current write tools:
 - `upsert_spec_constraint`: add or update one structured constraint in an existing spec without removing legacy constraints.
 - `upsert_spec_repository_change`: add or update one repository-scoped implementation plan in an existing spec.
 - `add_spec_out_of_scope_item`: add an out-of-scope item while avoiding duplicate descriptions.
+- `create_adr`: create one new ADR under `.archcontext/adrs/*.yaml`.
+- `upsert_adr`: create or update one ADR under `.archcontext/adrs/*.yaml`.
 - `validate_spec_repository_coverage`: validate repositoryChanges coverage for one spec.
 - `validate_workspace`: validate repository references, component references, active spec readiness, related ADRs, and schema versions without writing files.
 
@@ -355,6 +357,32 @@ Spec enrichment examples:
 
 ```json
 {
+  "name": "create_adr",
+  "arguments": {
+    "id": "ADR-002",
+    "title": "Expose cancellation audit status through Booking API",
+    "status": "proposed",
+    "date": "2026-05-28",
+    "context": "The booking frontend needs cancellation audit status without coupling to persistence details.",
+    "decision": "Booking API will provide the cancellation audit status contract consumed by booking-web.",
+    "consequences": [
+      "booking-web depends on the Booking API audit status contract.",
+      "booking-api remains the owner of cancellation audit persistence."
+    ],
+    "affectedRepositories": [
+      "booking-api",
+      "booking-web"
+    ],
+    "relatedSpecs": [
+      "SPEC-002"
+    ],
+    "dryRun": true
+  }
+}
+```
+
+```json
+{
   "name": "validate_spec_repository_coverage",
   "arguments": {
     "specId": "SPEC-002",
@@ -381,9 +409,10 @@ Example agent workflow:
 5. Add constraints with `upsert_spec_constraint`.
 6. Add repository-scoped plans with `upsert_spec_repository_change`.
 7. Add boundaries with `add_spec_out_of_scope_item`.
-8. Run `validate_spec_repository_coverage`.
-9. Run `validate_workspace`.
-10. Review the Git diff before committing shared `.archcontext` files.
+8. Create or update ADRs with `create_adr` or `upsert_adr` when the spec introduces architecture decisions.
+9. Run `validate_spec_repository_coverage`.
+10. Run `validate_workspace`.
+11. Review the Git diff before committing shared `.archcontext` files.
 
 ## MCP surface
 
@@ -404,6 +433,8 @@ Tools:
 - `get_repository_context`
 - `search_context`
 - `get_spec_context`
+- `list_adrs`
+- `get_adr_context`
 - `get_implementation_context_for_spec`
 - `get_repository_implementation_context_for_spec`
 - `resolve_repository_by_path`
@@ -416,6 +447,8 @@ Tools:
 - `upsert_spec_constraint`
 - `upsert_spec_repository_change`
 - `add_spec_out_of_scope_item`
+- `create_adr`
+- `upsert_adr`
 - `validate_spec_repository_coverage`
 - `validate_workspace`
 
