@@ -184,6 +184,7 @@ ArchContext uses the official Java MCP SDK. The currently integrated SDK version
 - Use `get_implementation_context_for_spec` before implementing a spec.
 - Use `resolve_repository_by_path` when an agent is running inside a local checkout and needs its ArchContext repository id.
 - Use `get_repository_implementation_context_for_spec` for repo-scoped implementation work; it returns the local repositoryChange, applicable requirements, acceptance criteria, contracts, constraints, ADRs, guidelines, and other affected repositories.
+- Use `get_agent_briefing_for_spec` when an implementation agent needs one consolidated payload for one spec and one repository.
 - Use `search_context` for targeted architecture lookup.
 - Prefer tools over broad resources for implementation workflows.
 
@@ -193,12 +194,20 @@ ArchContext can also update known YAML context files through structured MCP tool
 
 Current write tools:
 
+- `upsert_solution`: create or update solution identity, vision, principles, cross-cutting concerns, and glossary.
+- `upsert_solution_principle`: add or update one solution principle.
+- `upsert_solution_glossary_term`: add or update one glossary term.
 - `upsert_repository`: create or update one repository in `.archcontext/repositories.yaml`.
+- `upsert_repository_component`: add or update one component inside a repository definition.
+- `upsert_repository_responsibility`: add or update one repository responsibility.
 - `create_spec`: create one new spec under `.archcontext/specs/*.yaml`.
+- `create_guideline`: create one new guideline under `.archcontext/guidelines/*.yaml`.
+- `upsert_guideline`: create or update one guideline under `.archcontext/guidelines/*.yaml`.
 - `upsert_spec_requirement`: add or update one functional or non-functional requirement in an existing spec.
 - `upsert_spec_acceptance_criterion`: add or update one acceptance criterion in an existing spec.
 - `upsert_spec_constraint`: add or update one structured constraint in an existing spec without removing legacy constraints.
 - `upsert_spec_repository_change`: add or update one repository-scoped implementation plan in an existing spec.
+- `upsert_spec_affected_component`: add or update one affected component or file breadcrumb in an existing spec.
 - `add_spec_out_of_scope_item`: add an out-of-scope item while avoiding duplicate descriptions.
 - `create_adr`: create one new ADR under `.archcontext/adrs/*.yaml`.
 - `upsert_adr`: create or update one ADR under `.archcontext/adrs/*.yaml`.
@@ -217,6 +226,81 @@ Write tools are intentionally constrained:
 - Validation errors are returned as MCP tool errors with structured details.
 
 Dry-run example:
+
+```json
+{
+  "name": "upsert_solution_principle",
+  "arguments": {
+    "id": "tdd-red-green-refactor",
+    "title": "TDD red-green-refactor",
+    "description": "Behavior changes should be covered by focused tests before implementation is considered complete.",
+    "rationale": "Agents need executable feedback and a clear regression boundary.",
+    "appliesTo": [
+      "*"
+    ],
+    "dryRun": true
+  }
+}
+```
+
+```json
+{
+  "name": "upsert_repository_component",
+  "arguments": {
+    "repositoryId": "booking-api",
+    "componentId": "application-use-case",
+    "name": "Application Use Cases",
+    "type": "layer",
+    "path": "src/main/java/dev/booking/application",
+    "description": "Coordinates booking use cases without framework dependencies.",
+    "responsibilities": [
+      "RESP-001"
+    ],
+    "dependsOn": [
+      "booking-domain"
+    ],
+    "dryRun": true
+  }
+}
+```
+
+```json
+{
+  "name": "upsert_guideline",
+  "arguments": {
+    "id": "guideline-testing-be",
+    "title": "Backend testing guideline",
+    "category": "testing",
+    "appliesTo": {
+      "repositoryIds": [
+        "booking-api"
+      ],
+      "languages": [
+        "java"
+      ],
+      "repositoryTypes": [
+        "backend"
+      ]
+    },
+    "rules": [
+      {
+        "id": "TEST-001",
+        "statement": "Write focused JUnit 5 tests for behavior changes.",
+        "rationale": "Implementation agents need executable guardrails.",
+        "examples": {
+          "good": [
+            "Use AssertJ assertions over observable behavior."
+          ],
+          "bad": [
+            "Only assert that mocks were called."
+          ]
+        }
+      }
+    ],
+    "dryRun": true
+  }
+}
+```
 
 ```json
 {
@@ -357,6 +441,23 @@ Spec enrichment examples:
 
 ```json
 {
+  "name": "upsert_spec_affected_component",
+  "arguments": {
+    "specId": "SPEC-002",
+    "repositoryId": "booking-api",
+    "componentId": "application-use-case",
+    "path": "src/main/java/dev/booking/application/CancelBookingUseCase.java",
+    "lineStart": 50,
+    "lineEnd": 65,
+    "role": "modify",
+    "note": "Add cancellation audit orchestration.",
+    "dryRun": true
+  }
+}
+```
+
+```json
+{
   "name": "create_adr",
   "arguments": {
     "id": "ADR-002",
@@ -404,15 +505,18 @@ Example agent workflow:
 
 1. Create a spec with `create_spec` and `dryRun: true`.
 2. Create the spec without `dryRun`.
-3. Add requirements with `upsert_spec_requirement`.
-4. Add acceptance criteria with `upsert_spec_acceptance_criterion`.
-5. Add constraints with `upsert_spec_constraint`.
-6. Add repository-scoped plans with `upsert_spec_repository_change`.
-7. Add boundaries with `add_spec_out_of_scope_item`.
-8. Create or update ADRs with `create_adr` or `upsert_adr` when the spec introduces architecture decisions.
-9. Run `validate_spec_repository_coverage`.
-10. Run `validate_workspace`.
-11. Review the Git diff before committing shared `.archcontext` files.
+3. Register missing solution principles, glossary, repository components, and guidelines.
+4. Add requirements with `upsert_spec_requirement`.
+5. Add acceptance criteria with `upsert_spec_acceptance_criterion`.
+6. Add constraints with `upsert_spec_constraint`.
+7. Add repository-scoped plans with `upsert_spec_repository_change`.
+8. Add affected components or file breadcrumbs with `upsert_spec_affected_component`.
+9. Add boundaries with `add_spec_out_of_scope_item`.
+10. Create or update ADRs with `create_adr` or `upsert_adr` when the spec introduces architecture decisions.
+11. Run `validate_spec_repository_coverage`.
+12. Run `validate_workspace`.
+13. Implementation agents call `get_agent_briefing_for_spec` for their `{ specId, repositoryId }`.
+14. Review the Git diff before committing shared `.archcontext` files.
 
 ## MCP surface
 
@@ -435,17 +539,28 @@ Tools:
 - `get_spec_context`
 - `list_adrs`
 - `get_adr_context`
+- `list_guidelines`
+- `get_guideline`
 - `get_implementation_context_for_spec`
 - `get_repository_implementation_context_for_spec`
 - `resolve_repository_by_path`
+- `get_agent_briefing_for_spec`
 - `validate_spec_completeness`
 - `list_active_specs`
+- `upsert_solution`
+- `upsert_solution_principle`
+- `upsert_solution_glossary_term`
 - `upsert_repository`
+- `upsert_repository_component`
+- `upsert_repository_responsibility`
 - `create_spec`
+- `create_guideline`
+- `upsert_guideline`
 - `upsert_spec_requirement`
 - `upsert_spec_acceptance_criterion`
 - `upsert_spec_constraint`
 - `upsert_spec_repository_change`
+- `upsert_spec_affected_component`
 - `add_spec_out_of_scope_item`
 - `create_adr`
 - `upsert_adr`
