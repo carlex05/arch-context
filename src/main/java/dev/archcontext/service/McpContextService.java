@@ -62,6 +62,29 @@ public class McpContextService {
     return l.guidelines();
   }
 
+  public List<Guideline> listGuidelines(String category, String appliesTo) {
+    return l.guidelines().stream()
+        .filter(g -> category == null || category.isBlank() || category.equals(g.category()))
+        .filter(
+            g -> {
+              if (appliesTo == null || appliesTo.isBlank()) return true;
+              AppliesTo a = g.appliesTo();
+              return a == null
+                  || nvl(a.repositoryIds()).contains("*")
+                  || nvl(a.repositoryIds()).contains(appliesTo)
+                  || nvl(a.languages()).contains(appliesTo)
+                  || nvl(a.repositoryTypes()).contains(appliesTo);
+            })
+        .toList();
+  }
+
+  public Guideline getGuidelineContext(String id) {
+    return l.guidelines().stream()
+        .filter(g -> g.id().equals(id))
+        .findFirst()
+        .orElseThrow(() -> new IllegalArgumentException("Unknown guidelineId: " + id));
+  }
+
   public List<RepositoryDefinition> listRepositories() {
     return l.repositories();
   }

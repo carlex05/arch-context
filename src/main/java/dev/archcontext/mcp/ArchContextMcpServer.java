@@ -138,6 +138,22 @@ public class ArchContextMcpServer {
             strictObjectSchema(Map.of("adrId", stringProperty("ADR id")), "adrId"),
             args -> svc.getAdrContext(requiredString(args, "adrId"))),
         tool(
+            "list_guidelines",
+            "Return guidelines with optional category or appliesTo filtering.",
+            strictObjectSchema(
+                Map.of(
+                    "category",
+                    stringProperty("Optional guideline category"),
+                    "appliesTo",
+                    stringProperty("Optional repository id, language, or repository type")),
+                List.of()),
+            args -> svc.listGuidelines(optionalString(args, "category"), optionalString(args, "appliesTo"))),
+        tool(
+            "get_guideline",
+            "Return one guideline by id with its rules.",
+            strictObjectSchema(Map.of("guidelineId", stringProperty("Guideline id")), "guidelineId"),
+            args -> svc.getGuidelineContext(requiredString(args, "guidelineId"))),
+        tool(
             "get_implementation_context_for_spec",
             "Return focused implementation context for a spec, including affected repositories,"
                 + " requirements, acceptance criteria, constraints, related ADRs, and applicable"
@@ -175,6 +191,20 @@ public class ArchContextMcpServer {
             strictObjectSchema(Map.of("path", stringProperty("Local filesystem path")), "path"),
             args -> svc.resolveRepositoryByPath(requiredString(args, "path"))),
         tool(
+            "get_agent_briefing_for_spec",
+            "Return one consolidated repository-scoped briefing for an agent implementing a spec.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "repositoryId",
+                    stringProperty("Repository id")),
+                "specId",
+                "repositoryId"),
+            args ->
+                svc.getAgentBriefingForSpec(
+                    requiredString(args, "specId"), requiredString(args, "repositoryId"))),
+        tool(
             "validate_spec_completeness",
             "Check whether a spec has the minimum sections needed for implementation planning.",
             strictObjectSchema(Map.of("specId", stringProperty("Spec id")), "specId"),
@@ -185,6 +215,52 @@ public class ArchContextMcpServer {
                 + " or review.",
             strictObjectSchema(Map.of(), List.of()),
             args -> svc.listActiveSpecs()),
+        tool(
+            "upsert_solution",
+            "Create or update solution identity, vision, principles, cross-cutting concerns, and glossary.",
+            strictObjectSchema(solutionSchemaProperties(), "id", "name"),
+            args ->
+                writer.upsertSolution(
+                    solution(args), list(args.get("principles"), Principle.class), bool(args.get("dryRun")))),
+        tool(
+            "upsert_solution_principle",
+            "Add or update one solution principle.",
+            strictObjectSchema(
+                Map.of(
+                    "id",
+                    stringProperty("Principle id"),
+                    "title",
+                    stringProperty("Principle title"),
+                    "description",
+                    stringProperty("Principle description"),
+                    "rationale",
+                    stringProperty("Principle rationale"),
+                    "appliesTo",
+                    stringArrayProperty("Repository ids or *"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "id",
+                "title",
+                "description"),
+            args -> writer.upsertSolutionPrinciple(principle(args), bool(args.get("dryRun")))),
+        tool(
+            "upsert_solution_glossary_term",
+            "Add or update one solution glossary term.",
+            strictObjectSchema(
+                Map.of(
+                    "term",
+                    stringProperty("Glossary term"),
+                    "definition",
+                    stringProperty("Glossary definition"),
+                    "aliases",
+                    stringArrayProperty("Optional aliases"),
+                    "relatedTerms",
+                    stringArrayProperty("Optional related terms"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "term",
+                "definition"),
+            args -> writer.upsertSolutionGlossaryTerm(glossaryTerm(args), bool(args.get("dryRun")))),
         tool(
             "upsert_repository",
             "Create or update a repository definition in repositories.yaml using structured,"
@@ -210,6 +286,57 @@ public class ArchContextMcpServer {
                 "type",
                 "language"),
             args -> writer.upsertRepository(repository(args), bool(args.get("dryRun")))),
+        tool(
+            "upsert_repository_component",
+            "Add or update one internal component for a repository.",
+            strictObjectSchema(
+                Map.of(
+                    "repositoryId",
+                    stringProperty("Repository id"),
+                    "componentId",
+                    stringProperty("Component id"),
+                    "name",
+                    stringProperty("Component name"),
+                    "type",
+                    stringProperty("Component type"),
+                    "path",
+                    stringProperty("Component path"),
+                    "description",
+                    stringProperty("Component description"),
+                    "responsibilities",
+                    stringArrayProperty("Responsibility ids"),
+                    "dependsOn",
+                    stringArrayProperty("Component dependencies"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "repositoryId",
+                "componentId",
+                "name",
+                "type"),
+            args ->
+                writer.upsertRepositoryComponent(
+                    requiredString(args, "repositoryId"), component(args), bool(args.get("dryRun")))),
+        tool(
+            "upsert_repository_responsibility",
+            "Add or update one responsibility for a repository.",
+            strictObjectSchema(
+                Map.of(
+                    "repositoryId",
+                    stringProperty("Repository id"),
+                    "id",
+                    stringProperty("Responsibility id"),
+                    "description",
+                    stringProperty("Responsibility description"),
+                    "category",
+                    stringProperty("Optional responsibility category"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "repositoryId",
+                "id",
+                "description"),
+            args ->
+                writer.upsertRepositoryResponsibility(
+                    requiredString(args, "repositoryId"), responsibility(args), bool(args.get("dryRun")))),
         tool(
             "create_spec",
             "Create a new spec YAML file under specs/ using structured, validated input.",
@@ -241,6 +368,16 @@ public class ArchContextMcpServer {
                 "problem",
                 "businessGoal"),
             args -> writer.createSpec(spec(args), bool(args.get("dryRun")))),
+        tool(
+            "create_guideline",
+            "Create a new guideline YAML file under guidelines/ using structured, validated input.",
+            strictObjectSchema(guidelineSchemaProperties(), "id", "title"),
+            args -> writer.createGuideline(guideline(args), bool(args.get("dryRun")))),
+        tool(
+            "upsert_guideline",
+            "Create or update a guideline YAML file under guidelines/ using structured, validated input.",
+            strictObjectSchema(guidelineSchemaProperties(), "id", "title"),
+            args -> writer.upsertGuideline(guideline(args), bool(args.get("dryRun")))),
         tool(
             "upsert_spec_requirement",
             "Add or update one functional or non-functional requirement in an existing spec YAML.",
@@ -368,6 +505,34 @@ public class ArchContextMcpServer {
                     requiredString(args, "specId"),
                     repositoryChange(args),
                     bool(args.get("dryRun")))),
+        tool(
+            "upsert_spec_affected_component",
+            "Add or update one affected component or file breadcrumb in an existing spec YAML.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "repositoryId",
+                    stringProperty("Repository id"),
+                    "componentId",
+                    stringProperty("Optional component id"),
+                    "path",
+                    stringProperty("Optional file path"),
+                    "lineStart",
+                    integerProperty("Optional start line"),
+                    "lineEnd",
+                    integerProperty("Optional end line"),
+                    "role",
+                    stringProperty("modify, create, delete, or read"),
+                    "note",
+                    stringProperty("Optional note"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "specId",
+                "repositoryId"),
+            args ->
+                writer.upsertSpecAffectedComponent(
+                    requiredString(args, "specId"), componentRef(args), bool(args.get("dryRun")))),
         tool(
             "create_adr",
             "Create a new ADR YAML file under adrs/ using structured, validated input.",
@@ -541,6 +706,10 @@ public class ArchContextMcpServer {
     return Map.of("type", "boolean", "description", description);
   }
 
+  private static Map<String, Object> integerProperty(String description) {
+    return Map.of("type", "integer", "description", description);
+  }
+
   private static Map<String, Object> arrayProperty(String description) {
     return Map.of("type", "array", "items", Map.of("type", "object"), "description", description);
   }
@@ -559,6 +728,31 @@ public class ArchContextMcpServer {
         Map.entry("decision", stringProperty("ADR decision")),
         Map.entry("consequences", stringArrayProperty("ADR consequences")),
         Map.entry("affectedRepositories", stringArrayProperty("Affected repository ids")),
+        Map.entry("relatedSpecs", stringArrayProperty("Related spec ids")),
+        Map.entry("dryRun", booleanProperty("Validate and preview without writing")));
+  }
+
+  private static Map<String, Object> solutionSchemaProperties() {
+    return Map.ofEntries(
+        Map.entry("id", stringProperty("Solution id")),
+        Map.entry("name", stringProperty("Solution name")),
+        Map.entry("description", stringProperty("Solution description")),
+        Map.entry("vision", stringProperty("Solution vision")),
+        Map.entry("principles", arrayProperty("Solution principles")),
+        Map.entry("crossCuttingConcerns", arrayProperty("Cross-cutting concerns")),
+        Map.entry("glossary", arrayProperty("Glossary terms")),
+        Map.entry("dryRun", booleanProperty("Validate and preview without writing")));
+  }
+
+  private static Map<String, Object> guidelineSchemaProperties() {
+    return Map.ofEntries(
+        Map.entry("id", stringProperty("Guideline id")),
+        Map.entry("title", stringProperty("Guideline title")),
+        Map.entry("category", stringProperty("Guideline category")),
+        Map.entry("appliesTo", Map.of("type", "object", "description", "Guideline scope")),
+        Map.entry("rules", arrayProperty("Guideline rules")),
+        Map.entry("references", stringArrayProperty("External references")),
+        Map.entry("relatedAdrs", stringArrayProperty("Related ADR ids")),
         Map.entry("relatedSpecs", stringArrayProperty("Related spec ids")),
         Map.entry("dryRun", booleanProperty("Validate and preview without writing")));
   }
@@ -584,6 +778,40 @@ public class ArchContextMcpServer {
     return value instanceof Boolean b && b;
   }
 
+  private static Integer optionalInt(Map<String, Object> args, String name) {
+    Object value = args.get(name);
+    if (value instanceof Number n) return n.intValue();
+    if (value == null || value.toString().isBlank()) return null;
+    return Integer.valueOf(value.toString());
+  }
+
+  private static Solution solution(Map<String, Object> args) {
+    return new Solution(
+        requiredString(args, "id"),
+        requiredString(args, "name"),
+        optionalString(args, "description"),
+        optionalString(args, "vision"),
+        list(args.get("crossCuttingConcerns"), CrossCuttingConcern.class),
+        list(args.get("glossary"), GlossaryTerm.class));
+  }
+
+  private static Principle principle(Map<String, Object> args) {
+    return new Principle(
+        requiredString(args, "id"),
+        requiredString(args, "title"),
+        requiredString(args, "description"),
+        optionalString(args, "rationale"),
+        stringList(args.get("appliesTo")));
+  }
+
+  private static GlossaryTerm glossaryTerm(Map<String, Object> args) {
+    return new GlossaryTerm(
+        requiredString(args, "term"),
+        requiredString(args, "definition"),
+        stringList(args.get("aliases")),
+        stringList(args.get("relatedTerms")));
+  }
+
   private static RepositoryDefinition repository(Map<String, Object> args) {
     return new RepositoryDefinition(
         requiredString(args, "id"),
@@ -595,6 +823,24 @@ public class ArchContextMcpServer {
         optionalString(args, "description"),
         list(args.get("responsibilities"), Responsibility.class),
         list(args.get("components"), Component.class));
+  }
+
+  private static Component component(Map<String, Object> args) {
+    return new Component(
+        requiredString(args, "componentId"),
+        requiredString(args, "name"),
+        requiredString(args, "type"),
+        optionalString(args, "path"),
+        optionalString(args, "description"),
+        stringList(args.get("responsibilities")),
+        stringList(args.get("dependsOn")));
+  }
+
+  private static Responsibility responsibility(Map<String, Object> args) {
+    return new Responsibility(
+        requiredString(args, "id"),
+        requiredString(args, "description"),
+        optionalString(args, "category"));
   }
 
   private static Spec spec(Map<String, Object> args) {
@@ -632,6 +878,30 @@ public class ArchContextMcpServer {
         stringList(args.get("outOfScope")));
   }
 
+  private static ComponentRef componentRef(Map<String, Object> args) {
+    return new ComponentRef(
+        requiredString(args, "repositoryId"),
+        optionalString(args, "componentId"),
+        optionalString(args, "path"),
+        optionalInt(args, "lineStart"),
+        optionalInt(args, "lineEnd"),
+        optionalString(args, "role"),
+        optionalString(args, "note"));
+  }
+
+  private static Guideline guideline(Map<String, Object> args) {
+    return new Guideline(
+        requiredString(args, "id"),
+        requiredString(args, "title"),
+        optionalString(args, "category"),
+        object(args.get("appliesTo"), AppliesTo.class),
+        list(args.get("rules"), GuidelineRule.class),
+        stringList(args.get("references")),
+        stringList(args.get("relatedAdrs")),
+        stringList(args.get("relatedSpecs")),
+        null);
+  }
+
   private static Adr adr(Map<String, Object> args) {
     return new Adr(
         requiredString(args, "id"),
@@ -650,6 +920,10 @@ public class ArchContextMcpServer {
     if (!(value instanceof List<?>)) return List.of();
     JavaType listType = Json.MAPPER.getTypeFactory().constructCollectionType(List.class, type);
     return Json.MAPPER.convertValue(value, listType);
+  }
+
+  private static <T> T object(Object value, Class<T> type) {
+    return value == null ? null : Json.MAPPER.convertValue(value, type);
   }
 
   @FunctionalInterface

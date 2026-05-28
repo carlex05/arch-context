@@ -55,18 +55,29 @@ class ArchContextMcpServerTest {
             "get_spec_context",
             "list_adrs",
             "get_adr_context",
+            "list_guidelines",
+            "get_guideline",
             "get_implementation_context_for_spec",
             "get_repository_implementation_context_for_spec",
             "resolve_repository_by_path",
+            "get_agent_briefing_for_spec",
             "validate_spec_completeness",
             "list_active_specs",
+            "upsert_solution",
+            "upsert_solution_principle",
+            "upsert_solution_glossary_term",
             "upsert_repository",
+            "upsert_repository_component",
+            "upsert_repository_responsibility",
             "create_spec",
+            "create_guideline",
+            "upsert_guideline",
             "upsert_spec_requirement",
             "upsert_spec_acceptance_criterion",
             "add_spec_out_of_scope_item",
             "upsert_spec_constraint",
             "upsert_spec_repository_change",
+            "upsert_spec_affected_component",
             "create_adr",
             "upsert_adr",
             "validate_workspace",
@@ -76,9 +87,12 @@ class ArchContextMcpServerTest {
     assertStrictNoArgSchema(tools.get("get_solution_context"));
     assertStrictNoArgSchema(tools.get("list_active_specs"));
     assertStrictNoArgSchema(tools.get("list_adrs"));
+    assertProperty(tools.get("list_guidelines"), "category");
+    assertProperty(tools.get("list_guidelines"), "appliesTo");
     assertRequired(tools.get("get_repository_context"), "repositoryId");
     assertRequired(tools.get("get_spec_context"), "specId");
     assertRequired(tools.get("get_adr_context"), "adrId");
+    assertRequired(tools.get("get_guideline"), "guidelineId");
     assertRequired(tools.get("validate_spec_completeness"), "specId");
     assertRequired(tools.get("search_context"), "query");
     assertProperty(tools.get("search_context"), "types");
@@ -87,11 +101,29 @@ class ArchContextMcpServerTest {
     assertRequired(tools.get("get_repository_implementation_context_for_spec"), "specId");
     assertRequired(tools.get("get_repository_implementation_context_for_spec"), "repositoryId");
     assertRequired(tools.get("resolve_repository_by_path"), "path");
+    assertRequired(tools.get("get_agent_briefing_for_spec"), "specId");
+    assertRequired(tools.get("get_agent_briefing_for_spec"), "repositoryId");
+    assertRequired(tools.get("upsert_solution"), "id");
+    assertRequired(tools.get("upsert_solution"), "name");
+    assertProperty(tools.get("upsert_solution"), "principles");
+    assertProperty(tools.get("upsert_solution"), "glossary");
+    assertRequired(tools.get("upsert_solution_principle"), "id");
+    assertRequired(tools.get("upsert_solution_principle"), "title");
+    assertRequired(tools.get("upsert_solution_principle"), "description");
+    assertRequired(tools.get("upsert_solution_glossary_term"), "term");
+    assertRequired(tools.get("upsert_solution_glossary_term"), "definition");
     assertRequired(tools.get("upsert_repository"), "id");
     assertRequired(tools.get("upsert_repository"), "name");
     assertRequired(tools.get("upsert_repository"), "type");
     assertRequired(tools.get("upsert_repository"), "language");
     assertProperty(tools.get("upsert_repository"), "dryRun");
+    assertRequired(tools.get("upsert_repository_component"), "repositoryId");
+    assertRequired(tools.get("upsert_repository_component"), "componentId");
+    assertRequired(tools.get("upsert_repository_component"), "name");
+    assertRequired(tools.get("upsert_repository_component"), "type");
+    assertRequired(tools.get("upsert_repository_responsibility"), "repositoryId");
+    assertRequired(tools.get("upsert_repository_responsibility"), "id");
+    assertRequired(tools.get("upsert_repository_responsibility"), "description");
     assertRequired(tools.get("create_spec"), "id");
     assertRequired(tools.get("create_spec"), "title");
     assertRequired(tools.get("create_spec"), "status");
@@ -100,6 +132,11 @@ class ArchContextMcpServerTest {
     assertRequired(tools.get("create_spec"), "businessGoal");
     assertProperty(tools.get("create_spec"), "repositoryChanges");
     assertProperty(tools.get("create_spec"), "dryRun");
+    assertRequired(tools.get("create_guideline"), "id");
+    assertRequired(tools.get("create_guideline"), "title");
+    assertProperty(tools.get("create_guideline"), "rules");
+    assertRequired(tools.get("upsert_guideline"), "id");
+    assertRequired(tools.get("upsert_guideline"), "title");
     assertRequired(tools.get("upsert_spec_requirement"), "specId");
     assertRequired(tools.get("upsert_spec_requirement"), "requirementType");
     assertRequired(tools.get("upsert_spec_requirement"), "id");
@@ -125,6 +162,10 @@ class ArchContextMcpServerTest {
     assertProperty(tools.get("upsert_spec_repository_change"), "contractsConsumed");
     assertProperty(tools.get("upsert_spec_repository_change"), "outOfScope");
     assertProperty(tools.get("upsert_spec_repository_change"), "dryRun");
+    assertRequired(tools.get("upsert_spec_affected_component"), "specId");
+    assertRequired(tools.get("upsert_spec_affected_component"), "repositoryId");
+    assertProperty(tools.get("upsert_spec_affected_component"), "path");
+    assertProperty(tools.get("upsert_spec_affected_component"), "lineStart");
     assertRequired(tools.get("create_adr"), "id");
     assertRequired(tools.get("create_adr"), "title");
     assertRequired(tools.get("create_adr"), "status");
