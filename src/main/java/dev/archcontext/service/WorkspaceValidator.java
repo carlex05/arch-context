@@ -40,6 +40,9 @@ public class WorkspaceValidator {
         WriteValidation specValidation = validateSpec(root, spec);
         errors.addAll(specValidation.errors());
         warnings.addAll(specValidation.warnings());
+        WriteValidation coverage = validateSpecRepositoryCoverage(root, spec, strict);
+        errors.addAll(coverage.errors());
+        warnings.addAll(coverage.warnings());
         for (String adrId : nvl(spec.relatedAdrs())) {
           if (!adrIds.contains(adrId)) {
             String message = "Unknown related ADR in spec " + spec.id() + ": " + adrId;
@@ -78,11 +81,83 @@ public class WorkspaceValidator {
               .collect(Collectors.toMap(RepositoryDefinition::id, r -> r, (a, b) -> a));
       validateRepositoryRefs(spec, repositories, errors);
       validateComponentRefs(spec, repositories, errors);
+      validateRepositoryChanges(spec, repositories, errors);
     } catch (IOException e) {
       errors.add("Cannot read repository definitions: " + e.getMessage());
     }
 
     return new WriteValidation(errors, warnings);
+  }
+
+  public WriteValidation validateSpecRepositoryCoverage(Path root, Spec spec, boolean strict) {
+    List<String> errors = new ArrayList<>();
+    List<String> warnings = new ArrayList<>();
+    List<String> affectedRepositories = nvl(spec.affectedRepositories());
+    List<RepositoryChange> repositoryChanges = nvl(spec.repositoryChanges());
+
+    if (affectedRepositories.size() > 1 && repositoryChanges.isEmpty()) {
+      add(
+          strict,
+          errors,
+          warnings,
+          "Multi-repository spec has no repositoryChanges: " + spec.id());
+    }
+
+    if (!repositoryChanges.isEmpty()) {
+      Set<String> changedRepositories =
+          repositoryChanges.stream()
+              .map(RepositoryChange::repositoryId)
+              .filter(id -> id != null && !id.isBlank())
+              .collect(Collectors.toCollection(LinkedHashSet::new));
+      for (String repositoryId : affectedRepositories) {
+        if (!changedRepositories.contains(repositoryId)) {
+          add(
+              strict,
+              errors,
+              warnings,
+              "Affected repository has no repositoryChange in spec "
+                  + spec.id()
+                  + ": "
+                  + repositoryId);
+        }
+      }
+
+      Set<String> assignedRequirements =
+          repositoryChanges.stream()
+              .flatMap(c -> nvl(c.requirements()).stream())
+              .collect(Collectors.toCollection(LinkedHashSet::new));
+      for (String requirementId : requirementIds(spec)) {
+        if (!assignedRequirements.contains(requirementId)) {
+          add(
+              strict,
+              errors,
+              warnings,
+              "Requirement is not assigned to a repositoryChange in spec "
+                  + spec.id()
+                  + ": "
+                  + requirementId);
+        }
+      }
+
+      Set<String> assignedAcceptanceCriteria =
+          repositoryChanges.stream()
+              .flatMap(c -> nvl(c.acceptanceCriteria()).stream())
+              .collect(Collectors.toCollection(LinkedHashSet::new));
+      for (String acceptanceCriterionId : acceptanceCriterionIds(spec)) {
+        if (!assignedAcceptanceCriteria.contains(acceptanceCriterionId)) {
+          add(
+              strict,
+              errors,
+              warnings,
+              "Acceptance criterion is not assigned to a repositoryChange in spec "
+                  + spec.id()
+                  + ": "
+                  + acceptanceCriterionId);
+        }
+      }
+    }
+
+    return new WriteValidation(distinct(errors), distinct(warnings));
   }
 
   public void validateKnownWriteTarget(Path root, Path target) {
@@ -142,6 +217,68 @@ public class WorkspaceValidator {
         errors.add("Unknown component reference: " + ref.repositoryId() + ":" + ref.componentId());
       }
     }
+  }
+
+  private void validateRepositoryChanges(
+      Spec spec, Map<String, RepositoryDefinition> repositories, List<String> errors) {
+    Set<String> seenRepositories = new LinkedHashSet<>();
+    Set<String> requirementIds = requirementIds(spec);
+    Set<String> acceptanceCriterionIds = acceptanceCriterionIds(spec);
+    for (RepositoryChange change : nvl(spec.repositoryChanges())) {
+      if (blank(change.repositoryId())) {
+        errors.add("RepositoryChange repositoryId is required in spec " + spec.id() + ".");
+        continue;
+      }
+      if (!seenRepositories.add(change.repositoryId())) {
+        errors.add(
+            "Duplicate repositoryChange in spec " + spec.id() + ": " + change.repositoryId());
+      }
+      if (!repositories.containsKey(change.repositoryId())) {
+        errors.add("Unknown repositoryChange repository: " + change.repositoryId());
+      }
+      if (!nvl(spec.affectedRepositories()).contains(change.repositoryId())) {
+        errors.add(
+            "RepositoryChange repository must be listed in affectedRepositories: "
+                + change.repositoryId());
+      }
+      for (String requirementId : nvl(change.requirements())) {
+        if (!requirementIds.contains(requirementId)) {
+          errors.add(
+              "Unknown repositoryChange requirement in spec "
+                  + spec.id()
+                  + ": "
+                  + requirementId);
+        }
+      }
+      for (String acceptanceCriterionId : nvl(change.acceptanceCriteria())) {
+        if (!acceptanceCriterionIds.contains(acceptanceCriterionId)) {
+          errors.add(
+              "Unknown repositoryChange acceptance criterion in spec "
+                  + spec.id()
+                  + ": "
+                  + acceptanceCriterionId);
+        }
+      }
+    }
+  }
+
+  private Set<String> requirementIds(Spec spec) {
+    Set<String> ids = new LinkedHashSet<>();
+    for (Requirement requirement : nvl(spec.functionalRequirements())) ids.add(requirement.id());
+    for (Requirement requirement : nvl(spec.nonFunctionalRequirements())) ids.add(requirement.id());
+    return ids;
+  }
+
+  private Set<String> acceptanceCriterionIds(Spec spec) {
+    return nvl(spec.acceptanceCriteria()).stream()
+        .map(AcceptanceCriterion::id)
+        .collect(Collectors.toCollection(LinkedHashSet::new));
+  }
+
+  private void add(
+      boolean strict, List<String> errors, List<String> warnings, String message) {
+    if (strict) errors.add(message);
+    else warnings.add(message);
   }
 
   private void validateSchemaVersions(

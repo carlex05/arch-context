@@ -177,6 +177,122 @@ class YamlWorkspaceWriterTest {
   }
 
   @Test
+  void upsertSpecRepositoryChangeAddsRepositoryScopedPlan() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(specWithImplementationScope("SPEC-001", List.of("booking-api")), false);
+
+    WriteResult result =
+        writer.upsertSpecRepositoryChange(
+            "SPEC-001",
+            repositoryChange("booking-api", List.of("FR-001"), List.of("AC-001")),
+            false);
+
+    assertTrue(result.changed());
+    Spec spec = yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec;
+    assertEquals("booking-api", spec.repositoryChanges().getFirst().repositoryId());
+    assertEquals(List.of("FR-001"), spec.repositoryChanges().getFirst().requirements());
+  }
+
+  @Test
+  void upsertSpecRepositoryChangeUpdatesByRepositoryId() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(specWithImplementationScope("SPEC-001", List.of("booking-api")), false);
+    writer.upsertSpecRepositoryChange(
+        "SPEC-001", repositoryChange("booking-api", List.of("FR-001"), List.of("AC-001")), false);
+
+    WriteResult result =
+        writer.upsertSpecRepositoryChange(
+            "SPEC-001", repositoryChange("booking-api", List.of("NFR-001"), List.of("AC-001")), false);
+
+    assertTrue(result.changed());
+    Spec spec = yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec;
+    assertEquals(1, spec.repositoryChanges().size());
+    assertEquals(List.of("NFR-001"), spec.repositoryChanges().getFirst().requirements());
+  }
+
+  @Test
+  void upsertSpecRepositoryChangeRejectsUnknownRequirement() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(specWithImplementationScope("SPEC-001", List.of("booking-api")), false);
+
+    WriteResult result =
+        writer.upsertSpecRepositoryChange(
+            "SPEC-001",
+            repositoryChange("booking-api", List.of("FR-999"), List.of("AC-001")),
+            false);
+
+    assertFalse(result.changed());
+    assertTrue(
+        result.validation().errors().stream()
+            .anyMatch(e -> e.contains("Unknown repositoryChange requirement")));
+  }
+
+  @Test
+  void upsertSpecRepositoryChangeRejectsRepositoryOutsideAffectedRepositories() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.upsertRepository(repository("payment-service", "Payment Service"), false);
+    writer.createSpec(specWithImplementationScope("SPEC-001", List.of("booking-api")), false);
+
+    WriteResult result =
+        writer.upsertSpecRepositoryChange(
+            "SPEC-001",
+            repositoryChange("payment-service", List.of("FR-001"), List.of("AC-001")),
+            false);
+
+    assertFalse(result.changed());
+    assertTrue(
+        result.validation().errors().stream()
+            .anyMatch(e -> e.contains("affectedRepositories")));
+  }
+
+  @Test
+  void dryRunRepositoryChangeDoesNotModifySpecFile() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(specWithImplementationScope("SPEC-001", List.of("booking-api")), false);
+    Path specPath = root.resolve(".archcontext/specs/spec-001.yaml");
+    String before = Files.readString(specPath);
+
+    WriteResult result =
+        writer.upsertSpecRepositoryChange(
+            "SPEC-001",
+            repositoryChange("booking-api", List.of("FR-001"), List.of("AC-001")),
+            true);
+
+    assertTrue(result.changed());
+    assertEquals(before, Files.readString(specPath));
+  }
+
+  @Test
+  void validateWorkspaceWarnsWhenMultiRepositorySpecHasNoRepositoryChanges() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.upsertRepository(repository("payment-service", "Payment Service"), false);
+    writer.createSpec(
+        specWithImplementationScope("SPEC-001", List.of("booking-api", "payment-service")),
+        false);
+
+    WriteValidation result = writer.validateWorkspace(false);
+
+    assertTrue(
+        result.warnings().stream()
+            .anyMatch(w -> w.contains("Multi-repository spec has no repositoryChanges")));
+  }
+
+  @Test
+  void strictValidateWorkspaceErrorsWhenRequirementIsNotAssignedToRepositoryChange()
+      throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(specWithImplementationScope("SPEC-001", List.of("booking-api")), false);
+    writer.upsertSpecRepositoryChange(
+        "SPEC-001", repositoryChange("booking-api", List.of("FR-001"), List.of("AC-001")), false);
+
+    WriteValidation result = writer.validateWorkspace(true);
+
+    assertTrue(
+        result.errors().stream()
+            .anyMatch(e -> e.contains("Requirement is not assigned")));
+  }
+
+  @Test
   void validateWorkspaceDetectsUnknownRepositoryReference() throws Exception {
     writer.createSpec(spec("SPEC-001", List.of("unknown-api")), true);
     Path specPath = root.resolve(".archcontext/specs/spec-001.yaml");
@@ -339,5 +455,40 @@ class YamlWorkspaceWriterTest {
         List.of(new OpenQuestion("OQ-001", "Should provider fees be shown?")),
         List.of(),
         null);
+  }
+
+  private static Spec specWithImplementationScope(String id, List<String> repositories) {
+    return new Spec(
+        id,
+        "Partial booking cancellation",
+        "draft",
+        "architecture-team",
+        "Customers need partial cancellation.",
+        "Reduce support intervention.",
+        repositories,
+        List.of("booking"),
+        List.of(new Requirement("FR-001", "Cancel selected booking items.")),
+        List.of(new Requirement("NFR-001", "Keep cancellation latency under 500ms.")),
+        List.of(new AcceptanceCriterion("AC-001", "Remaining items stay active.")),
+        List.of(),
+        List.of(new Constraint("CON-001", "Payment ownership", "Do not access payment tables.")),
+        List.of(new ComponentRef("booking-api", "booking-domain")),
+        List.of(new OutOfScopeItem("Loyalty refunds are out of scope.")),
+        List.of(new OpenQuestion("OQ-001", "Should provider fees be shown?")),
+        List.of(),
+        null);
+  }
+
+  private static RepositoryChange repositoryChange(
+      String repositoryId, List<String> requirements, List<String> acceptanceCriteria) {
+    return new RepositoryChange(
+        repositoryId,
+        "backend",
+        "Implement repository-specific booking cancellation behavior.",
+        requirements,
+        acceptanceCriteria,
+        List.of("REST POST /bookings/{id}/cancel"),
+        List.of(),
+        List.of("Do not change payment refund orchestration."));
   }
 }

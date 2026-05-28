@@ -126,6 +126,16 @@ public class YamlWorkspaceWriter {
         "Upserted structured constraint " + constraint.id() + ".");
   }
 
+  public WriteResult upsertSpecRepositoryChange(
+      String specId, RepositoryChange repositoryChange, boolean dryRun) {
+    return updateSpec(
+        specId,
+        dryRun,
+        "Repository change was not written.",
+        spec -> updateRepositoryChange(spec, repositoryChange),
+        "Upserted repository change for " + repositoryChange.repositoryId() + ".");
+  }
+
   public WriteValidation validateWorkspace(boolean strict) {
     return validator.validateWorkspace(root, strict);
   }
@@ -196,6 +206,7 @@ public class YamlWorkspaceWriter {
         nvl(spec.affectedComponents()),
         nvl(spec.outOfScope()),
         nvl(spec.openQuestions()),
+        nvl(spec.repositoryChanges()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -221,6 +232,7 @@ public class YamlWorkspaceWriter {
         nvl(spec.affectedComponents()),
         nvl(spec.outOfScope()),
         nvl(spec.openQuestions()),
+        nvl(spec.repositoryChanges()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -247,6 +259,7 @@ public class YamlWorkspaceWriter {
         nvl(spec.affectedComponents()),
         items,
         nvl(spec.openQuestions()),
+        nvl(spec.repositoryChanges()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -272,6 +285,33 @@ public class YamlWorkspaceWriter {
         nvl(spec.affectedComponents()),
         nvl(spec.outOfScope()),
         nvl(spec.openQuestions()),
+        nvl(spec.repositoryChanges()),
+        nvl(spec.relatedAdrs()),
+        spec.sourcePath());
+  }
+
+  private Spec updateRepositoryChange(Spec spec, RepositoryChange repositoryChange) {
+    List<RepositoryChange> repositoryChanges = new ArrayList<>(nvl(spec.repositoryChanges()));
+    repositoryChanges.removeIf(c -> c.repositoryId().equals(repositoryChange.repositoryId()));
+    repositoryChanges.add(repositoryChange);
+    return spec(
+        spec.id(),
+        spec.title(),
+        spec.status(),
+        spec.owner(),
+        spec.problem(),
+        spec.businessGoal(),
+        nvl(spec.affectedRepositories()),
+        nvl(spec.affectedBoundedContexts()),
+        nvl(spec.functionalRequirements()),
+        nvl(spec.nonFunctionalRequirements()),
+        nvl(spec.acceptanceCriteria()),
+        nvl(spec.constraints()),
+        nvl(spec.structuredConstraints()),
+        nvl(spec.affectedComponents()),
+        nvl(spec.outOfScope()),
+        nvl(spec.openQuestions()),
+        repositoryChanges,
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -293,6 +333,7 @@ public class YamlWorkspaceWriter {
       List<ComponentRef> affectedComponents,
       List<OutOfScopeItem> outOfScope,
       List<OpenQuestion> openQuestions,
+      List<RepositoryChange> repositoryChanges,
       List<String> relatedAdrs,
       String sourcePath) {
     return new Spec(
@@ -312,6 +353,7 @@ public class YamlWorkspaceWriter {
         affectedComponents,
         outOfScope,
         openQuestions,
+        repositoryChanges,
         relatedAdrs,
         sourcePath);
   }
