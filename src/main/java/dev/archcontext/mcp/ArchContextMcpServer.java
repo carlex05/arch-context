@@ -128,6 +128,16 @@ public class ArchContextMcpServer {
             strictObjectSchema(Map.of("specId", stringProperty("Spec id")), "specId"),
             args -> svc.getSpecContext(requiredString(args, "specId"))),
         tool(
+            "list_adrs",
+            "Return all ADRs in the workspace.",
+            strictObjectSchema(Map.of(), List.of()),
+            args -> svc.listAdrs()),
+        tool(
+            "get_adr_context",
+            "Return one ADR by id.",
+            strictObjectSchema(Map.of("adrId", stringProperty("ADR id")), "adrId"),
+            args -> svc.getAdrContext(requiredString(args, "adrId"))),
+        tool(
             "get_implementation_context_for_spec",
             "Return focused implementation context for a spec, including affected repositories,"
                 + " requirements, acceptance criteria, constraints, related ADRs, and applicable"
@@ -359,6 +369,18 @@ public class ArchContextMcpServer {
                     repositoryChange(args),
                     bool(args.get("dryRun")))),
         tool(
+            "create_adr",
+            "Create a new ADR YAML file under adrs/ using structured, validated input.",
+            strictObjectSchema(
+                adrSchemaProperties(), "id", "title", "status", "date", "context", "decision"),
+            args -> writer.createAdr(adr(args), bool(args.get("dryRun")))),
+        tool(
+            "upsert_adr",
+            "Create or update an ADR YAML file under adrs/ using structured, validated input.",
+            strictObjectSchema(
+                adrSchemaProperties(), "id", "title", "status", "date", "context", "decision"),
+            args -> writer.upsertAdr(adr(args), bool(args.get("dryRun")))),
+        tool(
             "validate_workspace",
             "Validate repository references, component references, active spec readiness, related"
                 + " ADR references, and supported schema versions without writing files.",
@@ -527,6 +549,20 @@ public class ArchContextMcpServer {
     return Map.of("type", "array", "items", Map.of("type", "string"), "description", description);
   }
 
+  private static Map<String, Object> adrSchemaProperties() {
+    return Map.ofEntries(
+        Map.entry("id", stringProperty("ADR id")),
+        Map.entry("title", stringProperty("ADR title")),
+        Map.entry("status", stringProperty("ADR status")),
+        Map.entry("date", stringProperty("ADR date")),
+        Map.entry("context", stringProperty("ADR context")),
+        Map.entry("decision", stringProperty("ADR decision")),
+        Map.entry("consequences", stringArrayProperty("ADR consequences")),
+        Map.entry("affectedRepositories", stringArrayProperty("Affected repository ids")),
+        Map.entry("relatedSpecs", stringArrayProperty("Related spec ids")),
+        Map.entry("dryRun", booleanProperty("Validate and preview without writing")));
+  }
+
   private static String requiredString(Map<String, Object> args, String name) {
     String value = optionalString(args, name);
     if (value == null || value.isBlank()) {
@@ -594,6 +630,20 @@ public class ArchContextMcpServer {
         stringList(args.get("contractsProvided")),
         stringList(args.get("contractsConsumed")),
         stringList(args.get("outOfScope")));
+  }
+
+  private static Adr adr(Map<String, Object> args) {
+    return new Adr(
+        requiredString(args, "id"),
+        requiredString(args, "title"),
+        requiredString(args, "status"),
+        requiredString(args, "date"),
+        requiredString(args, "context"),
+        requiredString(args, "decision"),
+        stringList(args.get("consequences")),
+        stringList(args.get("affectedRepositories")),
+        stringList(args.get("relatedSpecs")),
+        null);
   }
 
   private static <T> List<T> list(Object value, Class<T> type) {

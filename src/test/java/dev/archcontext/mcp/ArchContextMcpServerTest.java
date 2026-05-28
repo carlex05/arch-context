@@ -53,6 +53,8 @@ class ArchContextMcpServerTest {
             "get_repository_context",
             "search_context",
             "get_spec_context",
+            "list_adrs",
+            "get_adr_context",
             "get_implementation_context_for_spec",
             "get_repository_implementation_context_for_spec",
             "resolve_repository_by_path",
@@ -65,14 +67,18 @@ class ArchContextMcpServerTest {
             "add_spec_out_of_scope_item",
             "upsert_spec_constraint",
             "upsert_spec_repository_change",
+            "create_adr",
+            "upsert_adr",
             "validate_workspace",
             "validate_spec_repository_coverage"),
         tools.keySet());
 
     assertStrictNoArgSchema(tools.get("get_solution_context"));
     assertStrictNoArgSchema(tools.get("list_active_specs"));
+    assertStrictNoArgSchema(tools.get("list_adrs"));
     assertRequired(tools.get("get_repository_context"), "repositoryId");
     assertRequired(tools.get("get_spec_context"), "specId");
+    assertRequired(tools.get("get_adr_context"), "adrId");
     assertRequired(tools.get("validate_spec_completeness"), "specId");
     assertRequired(tools.get("search_context"), "query");
     assertProperty(tools.get("search_context"), "types");
@@ -119,6 +125,23 @@ class ArchContextMcpServerTest {
     assertProperty(tools.get("upsert_spec_repository_change"), "contractsConsumed");
     assertProperty(tools.get("upsert_spec_repository_change"), "outOfScope");
     assertProperty(tools.get("upsert_spec_repository_change"), "dryRun");
+    assertRequired(tools.get("create_adr"), "id");
+    assertRequired(tools.get("create_adr"), "title");
+    assertRequired(tools.get("create_adr"), "status");
+    assertRequired(tools.get("create_adr"), "date");
+    assertRequired(tools.get("create_adr"), "context");
+    assertRequired(tools.get("create_adr"), "decision");
+    assertProperty(tools.get("create_adr"), "consequences");
+    assertProperty(tools.get("create_adr"), "affectedRepositories");
+    assertProperty(tools.get("create_adr"), "relatedSpecs");
+    assertProperty(tools.get("create_adr"), "dryRun");
+    assertRequired(tools.get("upsert_adr"), "id");
+    assertRequired(tools.get("upsert_adr"), "title");
+    assertRequired(tools.get("upsert_adr"), "status");
+    assertRequired(tools.get("upsert_adr"), "date");
+    assertRequired(tools.get("upsert_adr"), "context");
+    assertRequired(tools.get("upsert_adr"), "decision");
+    assertProperty(tools.get("upsert_adr"), "dryRun");
     assertProperty(tools.get("validate_workspace"), "strict");
     assertRequired(tools.get("validate_spec_repository_coverage"), "specId");
     assertProperty(tools.get("validate_spec_repository_coverage"), "strict");
