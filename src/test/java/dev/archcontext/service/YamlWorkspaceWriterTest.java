@@ -424,6 +424,47 @@ class YamlWorkspaceWriterTest {
   }
 
   @Test
+  void updateSpecStatusChangesExistingSpecStatus() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
+
+    WriteResult result = writer.updateSpecStatus("SPEC-001", "review", "Implementation done.", false);
+
+    assertTrue(result.changed());
+    assertEquals("review", yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec.status());
+  }
+
+  @Test
+  void upsertSpecMetadataAddsPlanningMetadata() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
+
+    WriteResult result =
+        writer.upsertSpecMetadata(
+            "SPEC-001", new SpecMetadata("high", 8.5, "S-42", "review", List.of("front9")), false);
+
+    assertTrue(result.changed());
+    SpecMetadata metadata = yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec.metadata();
+    assertEquals("high", metadata.priority());
+    assertEquals(8.5, metadata.effortHours());
+  }
+
+  @Test
+  void upsertSpecSummaryUpdatesProvidedFieldsOnly() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
+
+    WriteResult result =
+        writer.upsertSpecSummary("SPEC-001", "Updated title", null, null, "Updated goal.", false);
+
+    assertTrue(result.changed());
+    Spec spec = yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec;
+    assertEquals("Updated title", spec.title());
+    assertEquals("architecture-team", spec.owner());
+    assertEquals("Updated goal.", spec.businessGoal());
+  }
+
+  @Test
   void upsertSpecRepositoryChangeUpdatesByRepositoryId() throws Exception {
     writer.upsertRepository(repository("booking-api", "Booking API"), false);
     writer.createSpec(specWithImplementationScope("SPEC-001", List.of("booking-api")), false);
@@ -650,6 +691,23 @@ class YamlWorkspaceWriterTest {
       assertTrue(rs.next());
       assertEquals(1, rs.getInt(1));
     }
+  }
+
+  @Test
+  void upsertAdrConsequenceAddsConsequenceToExistingAdr() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createAdr(adr("ADR-001", List.of("booking-api"), List.of()), false);
+
+    WriteResult result =
+        writer.upsertAdrConsequence(
+            "ADR-001",
+            "Canonical binding format is yyyy-MM-dd HH:mm:ss.SSSSSSXXX UTC.",
+            false);
+
+    assertTrue(result.changed());
+    assertTrue(
+        yaml.read(root.resolve(".archcontext/adrs/adr-001.yaml")).adr.consequences().stream()
+            .anyMatch(c -> c.contains("yyyy-MM-dd")));
   }
 
   @Test

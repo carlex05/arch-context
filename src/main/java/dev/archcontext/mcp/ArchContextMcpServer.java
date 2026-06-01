@@ -359,6 +359,7 @@ public class ArchContextMcpServer {
                     Map.entry("outOfScope", arrayProperty("Out-of-scope items")),
                     Map.entry("openQuestions", arrayProperty("Open questions")),
                     Map.entry("repositoryChanges", arrayProperty("Repository-scoped changes")),
+                    Map.entry("metadata", Map.of("type", "object", "description", "Spec planning metadata")),
                     Map.entry("relatedAdrs", stringArrayProperty("Related ADR ids")),
                     Map.entry("dryRun", booleanProperty("Validate and preview without writing"))),
                 "id",
@@ -534,6 +535,76 @@ public class ArchContextMcpServer {
                 writer.upsertSpecAffectedComponent(
                     requiredString(args, "specId"), componentRef(args), bool(args.get("dryRun")))),
         tool(
+            "update_spec_status",
+            "Update an existing spec status without rewriting the full spec.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "status",
+                    stringProperty("New spec status"),
+                    "note",
+                    stringProperty("Optional status change note"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "specId",
+                "status"),
+            args ->
+                writer.updateSpecStatus(
+                    requiredString(args, "specId"),
+                    requiredString(args, "status"),
+                    optionalString(args, "note"),
+                    bool(args.get("dryRun")))),
+        tool(
+            "upsert_spec_metadata",
+            "Add or update planning metadata for an existing spec.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "priority",
+                    stringProperty("Optional priority"),
+                    "effortHours",
+                    numberProperty("Optional effort in hours"),
+                    "sprint",
+                    stringProperty("Optional sprint"),
+                    "phase",
+                    stringProperty("Optional phase"),
+                    "tags",
+                    stringArrayProperty("Optional tags"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "specId"),
+            args ->
+                writer.upsertSpecMetadata(
+                    requiredString(args, "specId"), specMetadata(args), bool(args.get("dryRun")))),
+        tool(
+            "upsert_spec_summary",
+            "Update existing spec summary fields such as title, owner, problem, or businessGoal.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "title",
+                    stringProperty("Optional title"),
+                    "owner",
+                    stringProperty("Optional owner"),
+                    "problem",
+                    stringProperty("Optional problem statement"),
+                    "businessGoal",
+                    stringProperty("Optional business goal"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "specId"),
+            args ->
+                writer.upsertSpecSummary(
+                    requiredString(args, "specId"),
+                    optionalString(args, "title"),
+                    optionalString(args, "owner"),
+                    optionalString(args, "problem"),
+                    optionalString(args, "businessGoal"),
+                    bool(args.get("dryRun")))),
+        tool(
             "create_adr",
             "Create a new ADR YAML file under adrs/ using structured, validated input.",
             strictObjectSchema(
@@ -545,6 +616,24 @@ public class ArchContextMcpServer {
             strictObjectSchema(
                 adrSchemaProperties(), "id", "title", "status", "date", "context", "decision"),
             args -> writer.upsertAdr(adr(args), bool(args.get("dryRun")))),
+        tool(
+            "upsert_adr_consequence",
+            "Add one consequence to an existing ADR without rewriting the full ADR.",
+            strictObjectSchema(
+                Map.of(
+                    "adrId",
+                    stringProperty("ADR id"),
+                    "consequence",
+                    stringProperty("ADR consequence"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "adrId",
+                "consequence"),
+            args ->
+                writer.upsertAdrConsequence(
+                    requiredString(args, "adrId"),
+                    requiredString(args, "consequence"),
+                    bool(args.get("dryRun")))),
         tool(
             "validate_workspace",
             "Validate repository references, component references, active spec readiness, related"
@@ -710,6 +799,10 @@ public class ArchContextMcpServer {
     return Map.of("type", "integer", "description", description);
   }
 
+  private static Map<String, Object> numberProperty(String description) {
+    return Map.of("type", "number", "description", description);
+  }
+
   private static Map<String, Object> arrayProperty(String description) {
     return Map.of("type", "array", "items", Map.of("type", "object"), "description", description);
   }
@@ -783,6 +876,13 @@ public class ArchContextMcpServer {
     if (value instanceof Number n) return n.intValue();
     if (value == null || value.toString().isBlank()) return null;
     return Integer.valueOf(value.toString());
+  }
+
+  private static Double optionalDouble(Map<String, Object> args, String name) {
+    Object value = args.get(name);
+    if (value instanceof Number n) return n.doubleValue();
+    if (value == null || value.toString().isBlank()) return null;
+    return Double.valueOf(value.toString());
   }
 
   private static Solution solution(Map<String, Object> args) {
@@ -862,6 +962,7 @@ public class ArchContextMcpServer {
         list(args.get("outOfScope"), OutOfScopeItem.class),
         list(args.get("openQuestions"), OpenQuestion.class),
         list(args.get("repositoryChanges"), RepositoryChange.class),
+        object(args.get("metadata"), SpecMetadata.class),
         stringList(args.get("relatedAdrs")),
         null);
   }
@@ -887,6 +988,15 @@ public class ArchContextMcpServer {
         optionalInt(args, "lineEnd"),
         optionalString(args, "role"),
         optionalString(args, "note"));
+  }
+
+  private static SpecMetadata specMetadata(Map<String, Object> args) {
+    return new SpecMetadata(
+        optionalString(args, "priority"),
+        optionalDouble(args, "effortHours"),
+        optionalString(args, "sprint"),
+        optionalString(args, "phase"),
+        stringList(args.get("tags")));
   }
 
   private static Guideline guideline(Map<String, Object> args) {

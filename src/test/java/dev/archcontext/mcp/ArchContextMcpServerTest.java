@@ -78,8 +78,12 @@ class ArchContextMcpServerTest {
             "upsert_spec_constraint",
             "upsert_spec_repository_change",
             "upsert_spec_affected_component",
+            "update_spec_status",
+            "upsert_spec_metadata",
+            "upsert_spec_summary",
             "create_adr",
             "upsert_adr",
+            "upsert_adr_consequence",
             "validate_workspace",
             "validate_spec_repository_coverage"),
         tools.keySet());
@@ -166,6 +170,14 @@ class ArchContextMcpServerTest {
     assertRequired(tools.get("upsert_spec_affected_component"), "repositoryId");
     assertProperty(tools.get("upsert_spec_affected_component"), "path");
     assertProperty(tools.get("upsert_spec_affected_component"), "lineStart");
+    assertRequired(tools.get("update_spec_status"), "specId");
+    assertRequired(tools.get("update_spec_status"), "status");
+    assertProperty(tools.get("update_spec_status"), "note");
+    assertRequired(tools.get("upsert_spec_metadata"), "specId");
+    assertProperty(tools.get("upsert_spec_metadata"), "priority");
+    assertProperty(tools.get("upsert_spec_metadata"), "effortHours");
+    assertRequired(tools.get("upsert_spec_summary"), "specId");
+    assertProperty(tools.get("upsert_spec_summary"), "title");
     assertRequired(tools.get("create_adr"), "id");
     assertRequired(tools.get("create_adr"), "title");
     assertRequired(tools.get("create_adr"), "status");
@@ -183,6 +195,8 @@ class ArchContextMcpServerTest {
     assertRequired(tools.get("upsert_adr"), "context");
     assertRequired(tools.get("upsert_adr"), "decision");
     assertProperty(tools.get("upsert_adr"), "dryRun");
+    assertRequired(tools.get("upsert_adr_consequence"), "adrId");
+    assertRequired(tools.get("upsert_adr_consequence"), "consequence");
     assertProperty(tools.get("validate_workspace"), "strict");
     assertRequired(tools.get("validate_spec_repository_coverage"), "specId");
     assertProperty(tools.get("validate_spec_repository_coverage"), "strict");

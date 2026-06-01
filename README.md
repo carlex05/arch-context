@@ -208,9 +208,13 @@ Current write tools:
 - `upsert_spec_constraint`: add or update one structured constraint in an existing spec without removing legacy constraints.
 - `upsert_spec_repository_change`: add or update one repository-scoped implementation plan in an existing spec.
 - `upsert_spec_affected_component`: add or update one affected component or file breadcrumb in an existing spec.
+- `update_spec_status`: change one existing spec status without rewriting the full spec.
+- `upsert_spec_metadata`: add or update planning metadata such as priority, effort, sprint, phase, and tags.
+- `upsert_spec_summary`: update existing spec summary fields such as title, owner, problem, or businessGoal.
 - `add_spec_out_of_scope_item`: add an out-of-scope item while avoiding duplicate descriptions.
 - `create_adr`: create one new ADR under `.archcontext/adrs/*.yaml`.
 - `upsert_adr`: create or update one ADR under `.archcontext/adrs/*.yaml`.
+- `upsert_adr_consequence`: add one consequence to an existing ADR.
 - `validate_spec_repository_coverage`: validate repositoryChanges coverage for one spec.
 - `validate_workspace`: validate repository references, component references, active spec readiness, related ADRs, and schema versions without writing files.
 
@@ -484,6 +488,29 @@ Spec enrichment examples:
 
 ```json
 {
+  "name": "update_spec_status",
+  "arguments": {
+    "specId": "SPEC-002",
+    "status": "review",
+    "note": "Implementation is complete and ready for review.",
+    "dryRun": true
+  }
+}
+```
+
+```json
+{
+  "name": "upsert_adr_consequence",
+  "arguments": {
+    "adrId": "ADR-002",
+    "consequence": "The canonical binding timestamp format is yyyy-MM-dd HH:mm:ss.SSSSSSXXX UTC.",
+    "dryRun": true
+  }
+}
+```
+
+```json
+{
   "name": "validate_spec_repository_coverage",
   "arguments": {
     "specId": "SPEC-002",
@@ -513,10 +540,12 @@ Example agent workflow:
 8. Add affected components or file breadcrumbs with `upsert_spec_affected_component`.
 9. Add boundaries with `add_spec_out_of_scope_item`.
 10. Create or update ADRs with `create_adr` or `upsert_adr` when the spec introduces architecture decisions.
-11. Run `validate_spec_repository_coverage`.
-12. Run `validate_workspace`.
-13. Implementation agents call `get_agent_briefing_for_spec` for their `{ specId, repositoryId }`.
-14. Review the Git diff before committing shared `.archcontext` files.
+11. Use `update_spec_status` when implementation reaches `review` or `done`.
+12. Use `upsert_adr_consequence` when implementation reveals a new consequence of an ADR.
+13. Run `validate_spec_repository_coverage`.
+14. Run `validate_workspace`.
+15. Implementation agents call `get_agent_briefing_for_spec` for their `{ specId, repositoryId }`.
+16. Review the Git diff before committing shared `.archcontext` files.
 
 ## MCP surface
 
@@ -561,9 +590,13 @@ Tools:
 - `upsert_spec_constraint`
 - `upsert_spec_repository_change`
 - `upsert_spec_affected_component`
+- `update_spec_status`
+- `upsert_spec_metadata`
+- `upsert_spec_summary`
 - `add_spec_out_of_scope_item`
 - `create_adr`
 - `upsert_adr`
+- `upsert_adr_consequence`
 - `validate_spec_repository_coverage`
 - `validate_workspace`
 

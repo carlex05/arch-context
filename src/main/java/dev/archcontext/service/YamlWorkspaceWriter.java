@@ -435,6 +435,85 @@ public class YamlWorkspaceWriter {
         "Upserted affected component for " + affectedComponent.repositoryId() + ".");
   }
 
+  public WriteResult updateSpecStatus(
+      String specId, String status, String note, boolean dryRun) {
+    return updateSpec(
+        specId,
+        dryRun,
+        "Spec status was not written.",
+        spec -> updateSpecStatus(spec, status),
+        "Updated spec " + specId + " status to " + status + ".");
+  }
+
+  public WriteResult upsertSpecMetadata(String specId, SpecMetadata metadata, boolean dryRun) {
+    return updateSpec(
+        specId,
+        dryRun,
+        "Spec metadata was not written.",
+        spec -> updateSpecMetadata(spec, metadata),
+        "Upserted metadata for spec " + specId + ".");
+  }
+
+  public WriteResult upsertSpecSummary(
+      String specId,
+      String title,
+      String owner,
+      String problem,
+      String businessGoal,
+      boolean dryRun) {
+    return updateSpec(
+        specId,
+        dryRun,
+        "Spec summary was not written.",
+        spec -> updateSpecSummary(spec, title, owner, problem, businessGoal),
+        "Updated summary fields for spec " + specId + ".");
+  }
+
+  public WriteResult upsertAdrConsequence(
+      String adrId, String consequence, boolean dryRun) {
+    try {
+      Path target = findAdrPath(adrId);
+      if (target == null) {
+        WriteValidation validation = new WriteValidation(List.of("Unknown adrId: " + adrId), List.of());
+        return result(false, dryRun, adrsDir(), "ADR consequence was not written.", validation, null);
+      }
+      validator.validateKnownWriteTarget(root, target);
+      YamlDocuments doc = yaml.read(target);
+      Adr original = doc.adr;
+      List<String> consequences = new ArrayList<>(nvl(original.consequences()));
+      boolean exists = consequences.stream().anyMatch(c -> c.equalsIgnoreCase(consequence));
+      if (!exists) consequences.add(consequence);
+      Adr updated =
+          new Adr(
+              original.id(),
+              original.title(),
+              original.status(),
+              original.date(),
+              original.context(),
+              original.decision(),
+              consequences,
+              original.affectedRepositories(),
+              original.relatedSpecs(),
+              original.sourcePath());
+      WriteValidation validation = validator.validateAdr(root, updated);
+      if (!validation.errors().isEmpty()) {
+        return result(false, dryRun, target, "ADR consequence was not written.", validation, updated);
+      }
+      boolean changed = !updated.equals(original);
+      doc.schemaVersion = "1.1";
+      doc.adr = updated;
+      if (changed && !dryRun) {
+        writeAtomically(target, doc);
+        reindex();
+      }
+      String summary = changed ? "Upserted consequence for ADR " + adrId + "." : "No changes for ADR " + adrId + ".";
+      return result(changed, dryRun, target, summary, validation, updated);
+    } catch (IOException | IllegalArgumentException e) {
+      WriteValidation validation = new WriteValidation(List.of(e.getMessage()), List.of());
+      return result(false, dryRun, adrsDir(), "ADR consequence was not written.", validation, null);
+    }
+  }
+
   public WriteValidation validateWorkspace(boolean strict) {
     WorkspaceFingerprint fingerprint = fingerprint();
     if (validationCache != null
@@ -580,6 +659,7 @@ public class YamlWorkspaceWriter {
         nvl(spec.outOfScope()),
         nvl(spec.openQuestions()),
         nvl(spec.repositoryChanges()),
+        spec.metadata(),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -606,6 +686,7 @@ public class YamlWorkspaceWriter {
         nvl(spec.outOfScope()),
         nvl(spec.openQuestions()),
         nvl(spec.repositoryChanges()),
+        spec.metadata(),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -633,6 +714,7 @@ public class YamlWorkspaceWriter {
         items,
         nvl(spec.openQuestions()),
         nvl(spec.repositoryChanges()),
+        spec.metadata(),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -659,6 +741,7 @@ public class YamlWorkspaceWriter {
         nvl(spec.outOfScope()),
         nvl(spec.openQuestions()),
         nvl(spec.repositoryChanges()),
+        spec.metadata(),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -685,6 +768,7 @@ public class YamlWorkspaceWriter {
         nvl(spec.outOfScope()),
         nvl(spec.openQuestions()),
         repositoryChanges,
+        spec.metadata(),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -711,6 +795,80 @@ public class YamlWorkspaceWriter {
         nvl(spec.outOfScope()),
         nvl(spec.openQuestions()),
         nvl(spec.repositoryChanges()),
+        spec.metadata(),
+        nvl(spec.relatedAdrs()),
+        spec.sourcePath());
+  }
+
+  private Spec updateSpecStatus(Spec spec, String status) {
+    return spec(
+        spec.id(),
+        spec.title(),
+        status,
+        spec.owner(),
+        spec.problem(),
+        spec.businessGoal(),
+        nvl(spec.affectedRepositories()),
+        nvl(spec.affectedBoundedContexts()),
+        nvl(spec.functionalRequirements()),
+        nvl(spec.nonFunctionalRequirements()),
+        nvl(spec.acceptanceCriteria()),
+        nvl(spec.constraints()),
+        nvl(spec.structuredConstraints()),
+        nvl(spec.affectedComponents()),
+        nvl(spec.outOfScope()),
+        nvl(spec.openQuestions()),
+        nvl(spec.repositoryChanges()),
+        spec.metadata(),
+        nvl(spec.relatedAdrs()),
+        spec.sourcePath());
+  }
+
+  private Spec updateSpecMetadata(Spec spec, SpecMetadata metadata) {
+    return spec(
+        spec.id(),
+        spec.title(),
+        spec.status(),
+        spec.owner(),
+        spec.problem(),
+        spec.businessGoal(),
+        nvl(spec.affectedRepositories()),
+        nvl(spec.affectedBoundedContexts()),
+        nvl(spec.functionalRequirements()),
+        nvl(spec.nonFunctionalRequirements()),
+        nvl(spec.acceptanceCriteria()),
+        nvl(spec.constraints()),
+        nvl(spec.structuredConstraints()),
+        nvl(spec.affectedComponents()),
+        nvl(spec.outOfScope()),
+        nvl(spec.openQuestions()),
+        nvl(spec.repositoryChanges()),
+        metadata,
+        nvl(spec.relatedAdrs()),
+        spec.sourcePath());
+  }
+
+  private Spec updateSpecSummary(
+      Spec spec, String title, String owner, String problem, String businessGoal) {
+    return spec(
+        spec.id(),
+        title == null || title.isBlank() ? spec.title() : title,
+        spec.status(),
+        owner == null || owner.isBlank() ? spec.owner() : owner,
+        problem == null || problem.isBlank() ? spec.problem() : problem,
+        businessGoal == null || businessGoal.isBlank() ? spec.businessGoal() : businessGoal,
+        nvl(spec.affectedRepositories()),
+        nvl(spec.affectedBoundedContexts()),
+        nvl(spec.functionalRequirements()),
+        nvl(spec.nonFunctionalRequirements()),
+        nvl(spec.acceptanceCriteria()),
+        nvl(spec.constraints()),
+        nvl(spec.structuredConstraints()),
+        nvl(spec.affectedComponents()),
+        nvl(spec.outOfScope()),
+        nvl(spec.openQuestions()),
+        nvl(spec.repositoryChanges()),
+        spec.metadata(),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -739,6 +897,7 @@ public class YamlWorkspaceWriter {
       List<OutOfScopeItem> outOfScope,
       List<OpenQuestion> openQuestions,
       List<RepositoryChange> repositoryChanges,
+      SpecMetadata metadata,
       List<String> relatedAdrs,
       String sourcePath) {
     return new Spec(
@@ -759,6 +918,7 @@ public class YamlWorkspaceWriter {
         outOfScope,
         openQuestions,
         repositoryChanges,
+        metadata,
         relatedAdrs,
         sourcePath);
   }

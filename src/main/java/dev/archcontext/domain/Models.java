@@ -128,6 +128,13 @@ public final class Models {
 
   public record OpenQuestion(String id, String question) {}
 
+  public record SpecMetadata(
+      String priority, Double effortHours, String sprint, String phase, List<String> tags) {
+    public SpecMetadata {
+      tags = tags == null ? List.of() : tags;
+    }
+  }
+
   public record RepositoryChange(
       String repositoryId,
       String role,
@@ -164,6 +171,7 @@ public final class Models {
       List<OutOfScopeItem> outOfScope,
       List<OpenQuestion> openQuestions,
       List<RepositoryChange> repositoryChanges,
+      SpecMetadata metadata,
       List<String> relatedAdrs,
       String sourcePath) {
     public Spec {
@@ -220,6 +228,7 @@ public final class Models {
           outOfScope,
           openQuestions,
           List.of(),
+          null,
           relatedAdrs,
           sourcePath);
     }
@@ -257,6 +266,7 @@ public final class Models {
           List.of(),
           List.of(),
           List.of(),
+          null,
           relatedAdrs,
           sourcePath);
     }
