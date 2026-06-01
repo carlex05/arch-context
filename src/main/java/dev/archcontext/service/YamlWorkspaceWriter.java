@@ -13,6 +13,7 @@ public class YamlWorkspaceWriter {
   private final YamlMapper yaml = new YamlMapper();
   private final ImportService importService = new ImportService();
   private final WorkspaceValidator validator = new WorkspaceValidator();
+  private ValidationCache validationCache;
 
   public YamlWorkspaceWriter(Path root) {
     this.root = root.toAbsolutePath().normalize();
@@ -435,7 +436,15 @@ public class YamlWorkspaceWriter {
   }
 
   public WriteValidation validateWorkspace(boolean strict) {
-    return validator.validateWorkspace(root, strict);
+    WorkspaceFingerprint fingerprint = fingerprint();
+    if (validationCache != null
+        && validationCache.strict() == strict
+        && validationCache.fingerprint().equals(fingerprint)) {
+      return validationCache.validation();
+    }
+    WriteValidation validation = validator.validateWorkspace(root, strict);
+    validationCache = new ValidationCache(strict, fingerprint, validation);
+    return validation;
   }
 
   public WriteValidation validateSpecRepositoryCoverage(String specId, boolean strict) {
@@ -822,6 +831,7 @@ public class YamlWorkspaceWriter {
 
   private void reindex() {
     importService.importWorkspace(root);
+    validationCache = null;
   }
 
   private WriteResult result(
@@ -892,7 +902,34 @@ public class YamlWorkspaceWriter {
     return value == null ? List.of() : value;
   }
 
+  private WorkspaceFingerprint fingerprint() {
+    long count = 0;
+    long size = 0;
+    long modified = 0;
+    if (!Files.isDirectory(archContextDir)) return new WorkspaceFingerprint(0, 0, 0);
+    try (var paths = Files.walk(archContextDir)) {
+      for (Path path :
+          paths
+              .filter(Files::isRegularFile)
+              .filter(p -> p.getFileName().toString().endsWith(".yaml"))
+              .sorted()
+              .toList()) {
+        count++;
+        size += Files.size(path);
+        modified = Math.max(modified, Files.getLastModifiedTime(path).toMillis());
+      }
+    } catch (IOException e) {
+      throw new IllegalStateException("Cannot fingerprint workspace: " + e.getMessage(), e);
+    }
+    return new WorkspaceFingerprint(count, size, modified);
+  }
+
   private record SpecFile(Path path, YamlDocuments document) {}
+
+  private record WorkspaceFingerprint(long fileCount, long totalSize, long maxModifiedMillis) {}
+
+  private record ValidationCache(
+      boolean strict, WorkspaceFingerprint fingerprint, WriteValidation validation) {}
 
   @FunctionalInterface
   private interface SpecUpdater {

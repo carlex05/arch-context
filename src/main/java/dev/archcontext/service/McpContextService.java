@@ -9,6 +9,7 @@ public class McpContextService {
   private final Path root;
   private final ContextLoaders l;
   private final SearchService search;
+  private SolutionContextCache solutionContextCache;
 
   public McpContextService(Path root) {
     this.root = root.toAbsolutePath().normalize();
@@ -17,12 +18,19 @@ public class McpContextService {
   }
 
   public SolutionContext getSolutionContext() {
-    return new SolutionContext(
+    WorkspaceFingerprint fingerprint = fingerprint();
+    if (solutionContextCache != null
+        && solutionContextCache.fingerprint().equals(fingerprint)) {
+      return solutionContextCache.context();
+    }
+    SolutionContext context = new SolutionContext(
         l.solution(),
         l.principles(),
         l.repositories(),
         listActiveSpecs(),
         l.adrs().stream().filter(a -> "accepted".equalsIgnoreCase(a.status())).toList());
+    solutionContextCache = new SolutionContextCache(fingerprint, context);
+    return context;
   }
 
   public RepositoryContext getRepositoryContext(String id) {
@@ -296,4 +304,32 @@ public class McpContextService {
   private static <T> List<T> nvl(List<T> x) {
     return x == null ? List.of() : x;
   }
+
+  private WorkspaceFingerprint fingerprint() {
+    long count = 0;
+    long size = 0;
+    long modified = 0;
+    Path dir = root.resolve(".archcontext");
+    if (!Files.isDirectory(dir)) return new WorkspaceFingerprint(0, 0, 0);
+    try (var paths = Files.walk(dir)) {
+      for (Path path :
+          paths
+              .filter(Files::isRegularFile)
+              .filter(p -> p.getFileName().toString().endsWith(".yaml"))
+              .sorted()
+              .toList()) {
+        count++;
+        size += Files.size(path);
+        modified = Math.max(modified, Files.getLastModifiedTime(path).toMillis());
+      }
+    } catch (Exception e) {
+      throw new IllegalStateException("Cannot fingerprint workspace: " + e.getMessage(), e);
+    }
+    return new WorkspaceFingerprint(count, size, modified);
+  }
+
+  private record WorkspaceFingerprint(long fileCount, long totalSize, long maxModifiedMillis) {}
+
+  private record SolutionContextCache(
+      WorkspaceFingerprint fingerprint, SolutionContext context) {}
 }

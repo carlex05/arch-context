@@ -89,7 +89,7 @@ public class WorkspaceValidator {
               .collect(Collectors.toMap(RepositoryDefinition::id, r -> r, (a, b) -> a));
       Set<String> adrIds = adrIds(root);
       for (Spec spec : specs(root)) {
-        WriteValidation specValidation = validateSpec(root, spec);
+        WriteValidation specValidation = validateSpec(spec, repositories);
         errors.addAll(specValidation.errors());
         warnings.addAll(specValidation.warnings());
         WriteValidation coverage = validateSpecRepositoryCoverage(root, spec, strict);
@@ -118,6 +118,19 @@ public class WorkspaceValidator {
   }
 
   public WriteValidation validateSpec(Path root, Spec spec) {
+    try {
+      Map<String, RepositoryDefinition> repositories =
+          repositoryService.list(root).stream()
+              .collect(Collectors.toMap(RepositoryDefinition::id, r -> r, (a, b) -> a));
+      return validateSpec(spec, repositories);
+    } catch (IOException e) {
+      return new WriteValidation(
+          List.of("Cannot read repository definitions: " + e.getMessage()), List.of());
+    }
+  }
+
+  private WriteValidation validateSpec(
+      Spec spec, Map<String, RepositoryDefinition> repositories) {
     List<String> errors = new ArrayList<>();
     List<String> warnings = new ArrayList<>();
     if (blank(spec.id())) errors.add("Spec id is required.");
@@ -127,16 +140,9 @@ public class WorkspaceValidator {
     if (blank(spec.problem())) errors.add("Spec problem is required.");
     if (blank(spec.businessGoal())) errors.add("Spec businessGoal is required.");
 
-    try {
-      Map<String, RepositoryDefinition> repositories =
-          repositoryService.list(root).stream()
-              .collect(Collectors.toMap(RepositoryDefinition::id, r -> r, (a, b) -> a));
-      validateRepositoryRefs(spec, repositories, errors);
-      validateComponentRefs(spec, repositories, errors);
-      validateRepositoryChanges(spec, repositories, errors);
-    } catch (IOException e) {
-      errors.add("Cannot read repository definitions: " + e.getMessage());
-    }
+    validateRepositoryRefs(spec, repositories, errors);
+    validateComponentRefs(spec, repositories, errors);
+    validateRepositoryChanges(spec, repositories, errors);
 
     return new WriteValidation(errors, warnings);
   }

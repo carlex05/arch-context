@@ -89,6 +89,20 @@ class ContextLoaders {
   }
 
   List<Spec> specs() {
+    Path dir = root.resolve(".archcontext/specs");
+    if (Files.isDirectory(dir)) {
+      try (var paths = Files.list(dir)) {
+        List<Spec> specs = new ArrayList<>();
+        for (Path path :
+            paths.filter(p -> p.getFileName().toString().endsWith(".yaml")).sorted().toList()) {
+          var doc = yaml.read(path);
+          if (doc.spec != null) specs.add(doc.spec);
+        }
+        return specs;
+      } catch (Exception e) {
+        throw new IllegalStateException(e);
+      }
+    }
     List<Spec> l = new ArrayList<>();
     try (Connection c = c();
         Statement s = c.createStatement();
@@ -134,6 +148,20 @@ class ContextLoaders {
   }
 
   List<Adr> adrs() {
+    Path dir = root.resolve(".archcontext/adrs");
+    if (Files.isDirectory(dir)) {
+      try (var paths = Files.list(dir)) {
+        List<Adr> adrs = new ArrayList<>();
+        for (Path path :
+            paths.filter(p -> p.getFileName().toString().endsWith(".yaml")).sorted().toList()) {
+          var doc = yaml.read(path);
+          if (doc.adr != null) adrs.add(doc.adr);
+        }
+        return adrs;
+      } catch (Exception e) {
+        throw new IllegalStateException(e);
+      }
+    }
     List<Adr> l = new ArrayList<>();
     try (Connection c = c();
         Statement s = c.createStatement();
