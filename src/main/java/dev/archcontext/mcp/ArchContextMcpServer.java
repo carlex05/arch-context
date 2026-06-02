@@ -36,6 +36,7 @@ public class ArchContextMcpServer {
     this.svc = new McpContextService(root);
     this.writer = new YamlWorkspaceWriter(root);
     this.jsonMapper = jsonMapper;
+    this.svc.warmUp();
   }
 
   public void run() {

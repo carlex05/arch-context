@@ -17,6 +17,18 @@ public class McpContextService {
     search = new SearchService(root);
   }
 
+  public void warmUp() {
+    try {
+      l.solution();
+      l.principles();
+      l.repositories();
+      l.guidelines();
+      dev.archcontext.util.Json.write(Map.of("status", "warm"));
+    } catch (RuntimeException e) {
+      // Warm-up is an optimization. Real tool calls should still surface precise failures.
+    }
+  }
+
   public SolutionContext getSolutionContext() {
     WorkspaceFingerprint fingerprint = fingerprint();
     if (solutionContextCache != null
@@ -87,9 +99,7 @@ public class McpContextService {
   }
 
   public Guideline getGuidelineContext(String id) {
-    return l.guidelines().stream()
-        .filter(g -> g.id().equals(id))
-        .findFirst()
+    return l.guideline(id)
         .orElseThrow(() -> new IllegalArgumentException("Unknown guidelineId: " + id));
   }
 

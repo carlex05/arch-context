@@ -240,6 +240,36 @@ class ContextLoaders {
     return l;
   }
 
+  Optional<Guideline> guideline(String id) {
+    Path dir = root.resolve(".archcontext/guidelines");
+    if (Files.isDirectory(dir)) {
+      Path expected = dir.resolve(slug(id) + ".yaml");
+      if (Files.exists(expected)) {
+        try {
+          var doc = yaml.read(expected);
+          if (doc.guideline != null && id.equals(doc.guideline.id())) {
+            return Optional.of(doc.guideline);
+          }
+        } catch (Exception e) {
+          throw new IllegalStateException(e);
+        }
+      }
+      try (var paths = Files.list(dir)) {
+        for (Path path :
+            paths.filter(p -> p.getFileName().toString().endsWith(".yaml")).sorted().toList()) {
+          var doc = yaml.read(path);
+          if (doc.guideline != null && id.equals(doc.guideline.id())) {
+            return Optional.of(doc.guideline);
+          }
+        }
+        return Optional.empty();
+      } catch (Exception e) {
+        throw new IllegalStateException(e);
+      }
+    }
+    return guidelines().stream().filter(g -> g.id().equals(id)).findFirst();
+  }
+
   private List<String> impacts(String type, String id) throws SQLException {
     String sql =
         "spec".equals(type)
@@ -254,5 +284,10 @@ class ContextLoaders {
       }
     }
     return l;
+  }
+
+  private String slug(String value) {
+    if (value == null || value.isBlank()) return "guideline";
+    return value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("(^-|-$)", "");
   }
 }
