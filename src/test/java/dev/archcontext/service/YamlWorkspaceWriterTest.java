@@ -292,6 +292,27 @@ class YamlWorkspaceWriterTest {
   }
 
   @Test
+  void upsertSpecRequirementReindexesOnlyChangedSpec() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
+    writer.createSpec(spec("SPEC-002", List.of("booking-api")), false);
+
+    writer.upsertSpecRequirement(
+        "SPEC-001", "functional", new Requirement("FR-002", "Allow partial cancellation."), false);
+
+    try (Connection c = new Database(root.resolve(".archcontext/archcontext.db")).connect()) {
+      assertEquals(1, count(c, "SELECT COUNT(*) FROM specs WHERE id = 'SPEC-001'"));
+      assertEquals(1, count(c, "SELECT COUNT(*) FROM specs WHERE id = 'SPEC-002'"));
+      assertTrue(
+          text(c, "SELECT content FROM documents WHERE type = 'spec' AND document_key = 'SPEC-001'")
+              .contains("FR-002"));
+      assertFalse(
+          text(c, "SELECT content FROM documents WHERE type = 'spec' AND document_key = 'SPEC-002'")
+              .contains("FR-002"));
+    }
+  }
+
+  @Test
   void upsertSpecAcceptanceCriterionAddsCriterion() throws Exception {
     writer.upsertRepository(repository("booking-api", "Booking API"), false);
     writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
@@ -735,6 +756,22 @@ class YamlWorkspaceWriterTest {
                 "domain",
                 "Booking business rules.",
                 List.of("RESP-001"))));
+  }
+
+  private static int count(Connection c, String sql) throws SQLException {
+    try (Statement statement = c.createStatement();
+        ResultSet rs = statement.executeQuery(sql)) {
+      rs.next();
+      return rs.getInt(1);
+    }
+  }
+
+  private static String text(Connection c, String sql) throws SQLException {
+    try (Statement statement = c.createStatement();
+        ResultSet rs = statement.executeQuery(sql)) {
+      rs.next();
+      return rs.getString(1);
+    }
   }
 
   private static Guideline guideline(String id) {

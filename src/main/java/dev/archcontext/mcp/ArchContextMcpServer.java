@@ -23,7 +23,7 @@ import java.util.concurrent.CountDownLatch;
 
 public class ArchContextMcpServer {
   private static final String JSON_MIME_TYPE = "application/json";
-  static final int STRUCTURED_CONTENT_MAX_CHARS = 16_384;
+  static final int STRUCTURED_CONTENT_MAX_CHARS = 4_096;
 
   private final McpContextService svc;
   private final YamlWorkspaceWriter writer;

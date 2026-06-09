@@ -622,7 +622,7 @@ public class YamlWorkspaceWriter {
       specFile.document().spec = updated;
       if (changed && !dryRun) {
         writeAtomically(specFile.path(), specFile.document());
-        reindex();
+        reindexSpec(specFile.path(), original.id());
       }
       String summary = changed ? successSummary : "No changes for spec " + specId + ".";
       return result(changed, dryRun, specFile.path(), summary, validation, updated);
@@ -991,6 +991,11 @@ public class YamlWorkspaceWriter {
 
   private void reindex() {
     importService.importWorkspace(root);
+    validationCache = null;
+  }
+
+  private void reindexSpec(Path specFile, String previousSpecId) {
+    importService.importSpecFile(root, specFile, previousSpecId);
     validationCache = null;
   }
 

@@ -34,6 +34,30 @@ public class ImportService {
     }
   }
 
+  public void importSpecFile(Path root, Path specFile, String previousSpecId) {
+    try {
+      Database db = new Database(root.resolve(".archcontext/archcontext.db"));
+      db.migrate();
+      YamlDocuments document = yaml.read(specFile);
+      if (document.spec == null) {
+        throw new IllegalArgumentException("YAML file does not contain a spec: " + specFile);
+      }
+      String specId = document.spec.id();
+      String content = Files.readString(specFile);
+      try (Connection c = db.connect()) {
+        c.setAutoCommit(false);
+        deleteSpec(c, previousSpecId);
+        if (!Objects.equals(previousSpecId, specId)) {
+          deleteSpec(c, specId);
+        }
+        importSpec(c, document.spec, specFile, content);
+        c.commit();
+      }
+    } catch (Exception e) {
+      throw new IllegalStateException("Spec import failed: " + e.getMessage(), e);
+    }
+  }
+
   private void clear(Connection c) throws SQLException {
     for (String t :
         List.of(
@@ -50,6 +74,30 @@ public class ImportService {
       try (Statement s = c.createStatement()) {
         s.executeUpdate("DELETE FROM " + t);
       }
+  }
+
+  private void deleteSpec(Connection c, String specId) throws SQLException {
+    if (specId == null || specId.isBlank()) return;
+    try (PreparedStatement ps =
+        c.prepareStatement(
+            "DELETE FROM document_chunks WHERE type = 'spec' AND document_key = ?")) {
+      ps.setString(1, specId);
+      ps.executeUpdate();
+    }
+    try (PreparedStatement ps =
+        c.prepareStatement("DELETE FROM documents WHERE type = 'spec' AND document_key = ?")) {
+      ps.setString(1, specId);
+      ps.executeUpdate();
+    }
+    try (PreparedStatement ps =
+        c.prepareStatement("DELETE FROM spec_repository_impact WHERE spec_id = ?")) {
+      ps.setString(1, specId);
+      ps.executeUpdate();
+    }
+    try (PreparedStatement ps = c.prepareStatement("DELETE FROM specs WHERE id = ?")) {
+      ps.setString(1, specId);
+      ps.executeUpdate();
+    }
   }
 
   private void importSolution(Connection c, Path dir) throws Exception {
