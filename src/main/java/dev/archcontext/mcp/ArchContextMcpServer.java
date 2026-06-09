@@ -23,6 +23,7 @@ import java.util.concurrent.CountDownLatch;
 
 public class ArchContextMcpServer {
   private static final String JSON_MIME_TYPE = "application/json";
+  static final int STRUCTURED_CONTENT_MAX_CHARS = 16_384;
 
   private final McpContextService svc;
   private final YamlWorkspaceWriter writer;
@@ -724,12 +725,6 @@ public class ArchContextMcpServer {
             .name(name)
             .description(description)
             .inputSchema(inputSchema)
-            .outputSchema(
-                Map.of(
-                    "type",
-                    "object",
-                    "properties",
-                    Map.of("data", Map.of("description", "Structured ArchContext result"))))
             .build();
     return McpServerFeatures.SyncToolSpecification.builder()
         .tool(tool)
@@ -740,21 +735,28 @@ public class ArchContextMcpServer {
   private McpSchema.CallToolResult callTool(ToolHandler handler, Map<String, Object> arguments) {
     try {
       Object data = handler.call(arguments == null ? Map.of() : arguments);
-      Object structured = Map.of("data", Json.MAPPER.convertValue(data, Object.class));
+      String content = Json.write(data);
       boolean isToolError =
           (data instanceof WriteResult result && !result.validation().errors().isEmpty())
               || (data instanceof WriteValidation validation && !validation.errors().isEmpty());
-      return McpSchema.CallToolResult.builder()
-          .content(List.of(new McpSchema.TextContent(Json.write(data))))
-          .structuredContent(structured)
-          .isError(isToolError)
-          .build();
+      McpSchema.CallToolResult.Builder builder =
+          McpSchema.CallToolResult.builder()
+              .content(List.of(new McpSchema.TextContent(content)))
+              .isError(isToolError);
+      if (shouldIncludeStructuredContent(content)) {
+        builder.structuredContent(Map.of("data", Json.MAPPER.convertValue(data, Object.class)));
+      }
+      return builder.build();
     } catch (IllegalArgumentException e) {
       return McpSchema.CallToolResult.builder()
           .content(List.of(new McpSchema.TextContent(e.getMessage())))
           .isError(true)
           .build();
     }
+  }
+
+  static boolean shouldIncludeStructuredContent(String content) {
+    return content.length() <= STRUCTURED_CONTENT_MAX_CHARS;
   }
 
   private McpServerFeatures.SyncPromptSpecification prompt(

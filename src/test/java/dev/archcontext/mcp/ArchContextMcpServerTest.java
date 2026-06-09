@@ -227,6 +227,14 @@ class ArchContextMcpServerTest {
     assertEquals("", out.toString());
   }
 
+  @Test
+  void structuredContentIsLimitedToSmallToolResults() {
+    assertTrue(ArchContextMcpServer.shouldIncludeStructuredContent("{}"));
+    assertFalse(
+        ArchContextMcpServer.shouldIncludeStructuredContent(
+            "x".repeat(ArchContextMcpServer.STRUCTURED_CONTENT_MAX_CHARS + 1)));
+  }
+
   private static void assertStrictNoArgSchema(McpSchema.Tool tool) {
     assertEquals("object", tool.inputSchema().get("type"));
     assertEquals(false, tool.inputSchema().get("additionalProperties"));
