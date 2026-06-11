@@ -353,11 +353,22 @@ public final class Models {
       List<Guideline> guidelines,
       List<String> constraints) {}
 
+  public record SpecSummary(
+      String id,
+      String title,
+      String status,
+      String owner,
+      String problem,
+      String businessGoal,
+      List<String> affectedRepositories,
+      List<String> relatedAdrs,
+      String sourcePath) {}
+
   public record SolutionContext(
       Solution solution,
       List<Principle> principles,
       List<RepositoryDefinition> repositories,
-      List<Spec> activeSpecs,
+      List<SpecSummary> activeSpecs,
       List<Adr> acceptedAdrs) {}
 
   public record ValidationResult(
@@ -374,7 +385,7 @@ public final class Models {
       Object object) {}
 
   public record ImplementationContext(
-      Spec spec,
+      SpecSummary spec,
       List<RepositoryDefinition> affectedRepositories,
       RepositoryContext repositoryContext,
       List<Requirement> functionalRequirements,
@@ -386,7 +397,7 @@ public final class Models {
       List<Guideline> applicableGuidelines) {}
 
   public record RepositoryImplementationContext(
-      Spec spec,
+      SpecSummary spec,
       RepositoryDefinition repository,
       RepositoryChange repositoryChange,
       List<RepositoryDefinition> otherAffectedRepositories,
@@ -402,7 +413,7 @@ public final class Models {
       Solution solution,
       List<Principle> principles,
       List<GlossaryTerm> glossary,
-      Spec spec,
+      SpecSummary spec,
       RepositoryDefinition repository,
       RepositoryChange repositoryChange,
       List<RepositoryDefinition> otherAffectedRepositories,

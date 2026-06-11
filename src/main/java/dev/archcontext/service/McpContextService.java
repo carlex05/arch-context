@@ -39,7 +39,7 @@ public class McpContextService {
         l.solution(),
         l.principles(),
         l.repositories(),
-        listActiveSpecs(),
+        listActiveSpecs().stream().map(this::summary).toList(),
         l.adrs().stream().filter(a -> "accepted".equalsIgnoreCase(a.status())).toList());
     solutionContextCache = new SolutionContextCache(fingerprint, context);
     return context;
@@ -125,7 +125,7 @@ public class McpContextService {
             ? affected.stream().flatMap(r -> applicableGuidelines(r).stream()).distinct().toList()
             : rc.guidelines();
     return new ImplementationContext(
-        s,
+        summary(s),
         affected,
         rc,
         nvl(s.functionalRequirements()),
@@ -167,7 +167,7 @@ public class McpContextService {
                         || nvl(a.relatedSpecs()).contains(spec.id()))
             .toList();
     return new RepositoryImplementationContext(
-        spec,
+        summary(spec),
         repository,
         repositoryChange,
         otherAffectedRepositories,
@@ -181,6 +181,7 @@ public class McpContextService {
   }
 
   public AgentBriefing getAgentBriefingForSpec(String specId, String repoId) {
+    Spec spec = getSpecContext(specId);
     RepositoryImplementationContext repositoryContext =
         getRepositoryImplementationContextForSpec(specId, repoId);
     List<Principle> principles =
@@ -199,7 +200,7 @@ public class McpContextService {
         repositoryContext.repository(),
         repositoryContext.repositoryChange(),
         repositoryContext.otherAffectedRepositories(),
-        nvl(repositoryContext.spec().affectedComponents()).stream()
+        nvl(spec.affectedComponents()).stream()
             .filter(c -> repoId.equals(c.repositoryId()))
             .toList(),
         repositoryContext.applicableFunctionalRequirements(),
@@ -305,6 +306,19 @@ public class McpContextService {
       List<AcceptanceCriterion> acceptanceCriteria, Set<String> applicableIds) {
     if (applicableIds == null) return nvl(acceptanceCriteria);
     return nvl(acceptanceCriteria).stream().filter(c -> applicableIds.contains(c.id())).toList();
+  }
+
+  private SpecSummary summary(Spec spec) {
+    return new SpecSummary(
+        spec.id(),
+        spec.title(),
+        spec.status(),
+        spec.owner(),
+        spec.problem(),
+        spec.businessGoal(),
+        nvl(spec.affectedRepositories()),
+        nvl(spec.relatedAdrs()),
+        spec.sourcePath());
   }
 
   private static boolean blank(String s) {
