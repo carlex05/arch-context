@@ -38,7 +38,13 @@ public class ArchContextMcpServer {
     this.svc = new McpContextService(root);
     this.writer = new YamlWorkspaceWriter(root);
     this.jsonMapper = jsonMapper;
-    this.svc.warmUp();
+    warmUpAsync();
+  }
+
+  private void warmUpAsync() {
+    Thread thread = new Thread(svc::warmUp, "archcontext-mcp-warmup");
+    thread.setDaemon(true);
+    thread.start();
   }
 
   public void run() {
