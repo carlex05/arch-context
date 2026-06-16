@@ -49,6 +49,7 @@ class ArchContextMcpServerTest {
 
     assertEquals(
         Set.of(
+            "get_server_info",
             "get_solution_context",
             "get_repository_context",
             "search_context",
@@ -88,6 +89,7 @@ class ArchContextMcpServerTest {
             "validate_spec_repository_coverage"),
         tools.keySet());
 
+    assertStrictNoArgSchema(tools.get("get_server_info"));
     assertStrictNoArgSchema(tools.get("get_solution_context"));
     assertStrictNoArgSchema(tools.get("list_active_specs"));
     assertStrictNoArgSchema(tools.get("list_adrs"));

@@ -1,6 +1,7 @@
 package dev.archcontext.mcp;
 
 import com.fasterxml.jackson.databind.JavaType;
+import dev.archcontext.BuildInfo;
 import dev.archcontext.domain.Models.*;
 import dev.archcontext.service.McpContextService;
 import dev.archcontext.service.YamlWorkspaceWriter;
@@ -60,7 +61,7 @@ public class ArchContextMcpServer {
     StdioServerTransportProvider transportProvider =
         new StdioServerTransportProvider(jsonMapper, in, out);
     return McpServer.sync(transportProvider)
-        .serverInfo("ArchContext", "0.1.0")
+        .serverInfo("ArchContext", BuildInfo.current().displayVersion())
         .capabilities(
             McpSchema.ServerCapabilities.builder()
                 .resources(false, false)
@@ -92,6 +93,11 @@ public class ArchContextMcpServer {
 
   List<McpServerFeatures.SyncToolSpecification> toolSpecifications() {
     return List.of(
+        tool(
+            "get_server_info",
+            "Return ArchContext MCP server build metadata, including jar version and commit.",
+            strictObjectSchema(Map.of(), List.of()),
+            args -> BuildInfo.current()),
         tool(
             "get_solution_context",
             "Return solution metadata, architecture principles, repositories, active specs, and"

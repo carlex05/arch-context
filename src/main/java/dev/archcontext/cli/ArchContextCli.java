@@ -1,5 +1,6 @@
 package dev.archcontext.cli;
 
+import dev.archcontext.BuildInfo;
 import dev.archcontext.domain.Models.*;
 import dev.archcontext.mcp.ArchContextMcpServer;
 import dev.archcontext.service.*;
@@ -13,7 +14,7 @@ import picocli.CommandLine.*;
 @Command(
     name = "archcontext",
     mixinStandardHelpOptions = true,
-    version = "0.1.0",
+    versionProvider = ArchContextCli.VersionProvider.class,
     description = "Local architecture-context MCP server",
     subcommands = {
       ArchContextCli.Init.class,
@@ -39,6 +40,20 @@ public class ArchContextCli implements Callable<Integer> {
 
   static Path resolveRoot(Path root) {
     return root == null ? root() : root.toAbsolutePath().normalize();
+  }
+
+  static class VersionProvider implements IVersionProvider {
+    @Override
+    public String[] getVersion() {
+      BuildInfo info = BuildInfo.current();
+      return new String[] {
+        "archcontext "
+            + info.displayVersion()
+            + " (built "
+            + info.buildTimestamp()
+            + ")"
+      };
+    }
   }
 
   @Command(name = "init", description = "Create .archcontext YAML source tree")
