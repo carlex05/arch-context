@@ -6,14 +6,24 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
+import java.util.concurrent.*;
 
 public class YamlWorkspaceWriter {
+  private static final ExecutorService SPEC_INDEX_EXECUTOR =
+      Executors.newSingleThreadExecutor(
+          r -> {
+            Thread thread = new Thread(r, "archcontext-spec-indexer");
+            thread.setDaemon(true);
+            return thread;
+          });
+
   private final Path root;
   private final Path archContextDir;
   private final YamlMapper yaml = new YamlMapper();
   private final ImportService importService = new ImportService();
   private final WorkspaceValidator validator = new WorkspaceValidator();
   private ValidationCache validationCache;
+  private volatile Future<?> pendingSpecIndexing = CompletableFuture.completedFuture(null);
 
   public YamlWorkspaceWriter(Path root) {
     this.root = root.toAbsolutePath().normalize();
@@ -995,8 +1005,27 @@ public class YamlWorkspaceWriter {
   }
 
   private void reindexSpec(Path specFile, String previousSpecId) {
-    importService.importSpecFile(root, specFile, previousSpecId);
     validationCache = null;
+    pendingSpecIndexing =
+        SPEC_INDEX_EXECUTOR.submit(
+            () -> {
+              try {
+                importService.importSpecFile(root, specFile, previousSpecId);
+              } catch (RuntimeException e) {
+                System.err.println("ArchContext spec index refresh failed: " + e.getMessage());
+              }
+            });
+  }
+
+  void awaitPendingSpecIndexing() {
+    try {
+      pendingSpecIndexing.get();
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("Interrupted while waiting for spec indexing.", e);
+    } catch (ExecutionException e) {
+      throw new IllegalStateException("Spec indexing failed.", e);
+    }
   }
 
   private WriteResult result(

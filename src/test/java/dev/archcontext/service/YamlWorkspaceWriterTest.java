@@ -299,6 +299,7 @@ class YamlWorkspaceWriterTest {
 
     writer.upsertSpecRequirement(
         "SPEC-001", "functional", new Requirement("FR-002", "Allow partial cancellation."), false);
+    writer.awaitPendingSpecIndexing();
 
     try (Connection c = new Database(root.resolve(".archcontext/archcontext.db")).connect()) {
       assertEquals(1, count(c, "SELECT COUNT(*) FROM specs WHERE id = 'SPEC-001'"));
@@ -690,6 +691,7 @@ class YamlWorkspaceWriterTest {
 
     writer.upsertSpecAcceptanceCriterion(
         "SPEC-001", new AcceptanceCriterion("AC-001", "Remaining items stay active."), false);
+    writer.awaitPendingSpecIndexing();
 
     try (Connection c = new Database(root.resolve(".archcontext/archcontext.db")).connect();
         ResultSet rs =
