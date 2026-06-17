@@ -31,8 +31,12 @@ ArchContext currently compiles with `maven.compiler.release=21`. The code does n
 Build the executable JAR:
 
 ```bash
-mvn -q clean package
+mvn -q clean package -Dgit.commit=$(git rev-parse --short HEAD)
 ```
+
+The `git.commit` property is optional, but recommended. It is embedded in the
+JAR and exposed through the CLI, MCP `serverInfo`, and the `get_server_info`
+tool so agents can prove which build they are using.
 
 Import the sample architecture context:
 
@@ -67,6 +71,9 @@ Configure your MCP client using absolute paths:
 }
 ```
 
+For clients with aggressive startup/tool timeouts, set them explicitly. A Java
+stdio MCP server can take close to one second to start even when healthy.
+
 Paste-ready agent prompts:
 
 - "Use ArchContext to get the solution context."
@@ -88,8 +95,9 @@ The smoke test validates packaging, sample import, `doctor`, and a minimal stdio
 Requires Maven and JDK 21 or newer.
 
 ```bash
-mvn package
+mvn package -Dgit.commit=$(git rev-parse --short HEAD)
 java -jar target/archcontext.jar --help
+java -jar target/archcontext.jar --version
 ```
 
 ## CLI usage
@@ -171,7 +179,35 @@ Run `archcontext import` after editing shared YAML or local overrides.
 }
 ```
 
-Run `archcontext import` in that workspace before starting the MCP server so `.archcontext/archcontext.db` exists.
+Run `archcontext import` in that workspace before starting the MCP server so
+`.archcontext/archcontext.db` exists. Most context tools read YAML directly, but
+`search_context` uses the SQLite index.
+
+Example opencode configuration:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "arch-context-front9": {
+      "type": "local",
+      "command": [
+        "java",
+        "-jar",
+        "/home/csze/sources/arch-context/target/archcontext.jar",
+        "mcp",
+        "--root",
+        "/home/csze/sources/arch-context-front9"
+      ],
+      "timeout": 30000,
+      "enabled": true
+    }
+  },
+  "experimental": {
+    "mcp_timeout": 30000
+  }
+}
+```
 
 ## MCP compatibility
 
@@ -179,6 +215,8 @@ ArchContext uses the official Java MCP SDK. The currently integrated SDK version
 
 ## How agents should use ArchContext
 
+- Start with `get_server_info` when diagnosing client/server mismatches. It
+  returns the JAR version, build timestamp, and embedded Git commit.
 - Start with `get_solution_context` to understand the solution, repositories, active specs, and accepted ADRs.
 - Use `get_repository_context` when working inside one repository.
 - Use `get_implementation_context_for_spec` before implementing a spec.
@@ -190,7 +228,7 @@ ArchContext uses the official Java MCP SDK. The currently integrated SDK version
 
 ## Controlled write tools
 
-ArchContext can also update known YAML context files through structured MCP tools. YAML remains the source of truth, and `.archcontext/archcontext.db` remains a generated local index rebuilt after successful writes.
+ArchContext can also update known YAML context files through structured MCP tools. YAML remains the source of truth, and `.archcontext/archcontext.db` remains a generated local index. Full-workspace writes rebuild the index synchronously. Incremental spec writes persist YAML first and refresh the spec index asynchronously so MCP write tools do not block on SQLite.
 
 Current write tools:
 
@@ -562,6 +600,7 @@ Resources:
 
 Tools:
 
+- `get_server_info`
 - `get_solution_context`
 - `get_repository_context`
 - `search_context`
@@ -638,6 +677,15 @@ workspace/
 
 ## Troubleshooting
 
+Verify the running build
+
+- Run `java -jar target/archcontext.jar --version`.
+- From the MCP client, call `get_server_info`.
+- The CLI version, MCP `serverInfo.version`, and `get_server_info.gitCommit`
+  should agree. If the MCP tool reports an old or `unknown` commit, rebuild with
+  `mvn package -DskipTests -Dgit.commit=$(git rev-parse --short HEAD)` and
+  restart the MCP client.
+
 `SQLITE_CANTOPEN: Unable to open the database file`
 
 - Check that `--root` points to the ArchContext workspace, not necessarily the directory where the MCP client starts.
@@ -661,12 +709,19 @@ MCP client starts but tools are unavailable
 - Check the workspace path passed to `--root` is absolute.
 - Check the Java version used by the MCP client is JDK 21 or newer.
 - Check whether the client supports the protocol version negotiated by the Java MCP SDK.
+- Increase the client's MCP startup/tool timeout if it defaults to a very low
+  value. For opencode local MCP servers, set `timeout` in the server entry and
+  `experimental.mcp_timeout` to values such as `30000` milliseconds.
 
 MCP client cannot connect
 
 - Ensure `mcp` mode prints no banners or logs to stdout.
 - Diagnostics and logs must go to stderr or a file.
 - Run `scripts/smoke-test-mcp.sh` to verify packaging and a minimal stdio handshake.
+- If `serverInfo` or `get_server_info` intermittently times out, suspect client
+  startup timeout rather than payload size. The server warms context in the
+  background, but JVM startup and MCP SDK initialization still have a non-zero
+  cold-start cost.
 
 ## Security and runtime model
 
