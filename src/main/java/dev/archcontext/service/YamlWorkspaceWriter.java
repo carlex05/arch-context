@@ -397,6 +397,25 @@ public class YamlWorkspaceWriter {
         "Upserted " + requirementType + " requirement " + requirement.id() + ".");
   }
 
+  public WriteResult deprecateSpecRequirement(
+      String specId,
+      String requirementType,
+      String requirementId,
+      String status,
+      String reason,
+      String supersededBy,
+      String relatedAdr,
+      boolean dryRun) {
+    return updateSpec(
+        specId,
+        dryRun,
+        "Requirement status was not written.",
+        spec ->
+            deprecateRequirement(
+                spec, requirementType, requirementId, status, reason, supersededBy, relatedAdr),
+        "Updated " + requirementType + " requirement " + requirementId + " status to " + status + ".");
+  }
+
   public WriteResult upsertSpecAcceptanceCriterion(
       String specId, AcceptanceCriterion acceptanceCriterion, boolean dryRun) {
     return updateSpec(
@@ -501,6 +520,8 @@ public class YamlWorkspaceWriter {
               original.date(),
               original.context(),
               original.decision(),
+              original.supersededBy(),
+              original.statusNote(),
               consequences,
               original.affectedRepositories(),
               original.relatedSpecs(),
@@ -521,6 +542,50 @@ public class YamlWorkspaceWriter {
     } catch (IOException | IllegalArgumentException e) {
       WriteValidation validation = new WriteValidation(List.of(e.getMessage()), List.of());
       return result(false, dryRun, adrsDir(), "ADR consequence was not written.", validation, null);
+    }
+  }
+
+  public WriteResult updateAdrStatus(
+      String adrId, String status, String supersededBy, String note, boolean dryRun) {
+    try {
+      Path target = findAdrPath(adrId);
+      if (target == null) {
+        WriteValidation validation = new WriteValidation(List.of("Unknown adrId: " + adrId), List.of());
+        return result(false, dryRun, adrsDir(), "ADR status was not written.", validation, null);
+      }
+      validator.validateKnownWriteTarget(root, target);
+      YamlDocuments doc = yaml.read(target);
+      Adr original = doc.adr;
+      Adr updated =
+          new Adr(
+              original.id(),
+              original.title(),
+              status,
+              original.date(),
+              original.context(),
+              original.decision(),
+              supersededBy == null || supersededBy.isBlank() ? original.supersededBy() : supersededBy,
+              note == null || note.isBlank() ? original.statusNote() : note,
+              original.consequences(),
+              original.affectedRepositories(),
+              original.relatedSpecs(),
+              original.sourcePath());
+      WriteValidation validation = validator.validateAdr(root, updated);
+      if (!validation.errors().isEmpty()) {
+        return result(false, dryRun, target, "ADR status was not written.", validation, updated);
+      }
+      boolean changed = !updated.equals(original);
+      doc.schemaVersion = "1.1";
+      doc.adr = updated;
+      if (changed && !dryRun) {
+        writeAtomically(target, doc);
+        reindex();
+      }
+      String summary = changed ? "Updated ADR " + adrId + " status to " + status + "." : "No changes for ADR " + adrId + ".";
+      return result(changed, dryRun, target, summary, validation, updated);
+    } catch (IOException | IllegalArgumentException e) {
+      WriteValidation validation = new WriteValidation(List.of(e.getMessage()), List.of());
+      return result(false, dryRun, adrsDir(), "ADR status was not written.", validation, null);
     }
   }
 
@@ -651,6 +716,69 @@ public class YamlWorkspaceWriter {
     List<Requirement> target = "functional".equals(requirementType) ? functional : nonFunctional;
     target.removeIf(r -> r.id().equals(requirement.id()));
     target.add(requirement);
+    return spec(
+        spec.id(),
+        spec.title(),
+        spec.status(),
+        spec.owner(),
+        spec.problem(),
+        spec.businessGoal(),
+        nvl(spec.affectedRepositories()),
+        nvl(spec.affectedBoundedContexts()),
+        functional,
+        nonFunctional,
+        nvl(spec.acceptanceCriteria()),
+        nvl(spec.constraints()),
+        nvl(spec.structuredConstraints()),
+        nvl(spec.affectedComponents()),
+        nvl(spec.outOfScope()),
+        nvl(spec.openQuestions()),
+        nvl(spec.repositoryChanges()),
+        spec.metadata(),
+        nvl(spec.relatedAdrs()),
+        spec.sourcePath());
+  }
+
+  private Spec deprecateRequirement(
+      Spec spec,
+      String requirementType,
+      String requirementId,
+      String status,
+      String reason,
+      String supersededBy,
+      String relatedAdr) {
+    if (!Set.of("obsolete", "superseded", "rejected").contains(status)) {
+      throw new IllegalArgumentException("status must be obsolete, superseded, or rejected.");
+    }
+    if (reason == null || reason.isBlank()) {
+      throw new IllegalArgumentException("reason is required when deprecating a requirement.");
+    }
+    if (!"functional".equals(requirementType) && !"nonFunctional".equals(requirementType)) {
+      throw new IllegalArgumentException("requirementType must be functional or nonFunctional.");
+    }
+    List<Requirement> functional = new ArrayList<>(nvl(spec.functionalRequirements()));
+    List<Requirement> nonFunctional = new ArrayList<>(nvl(spec.nonFunctionalRequirements()));
+    List<Requirement> target = "functional".equals(requirementType) ? functional : nonFunctional;
+    boolean updated = false;
+    for (int i = 0; i < target.size(); i++) {
+      Requirement requirement = target.get(i);
+      if (requirementId.equals(requirement.id())) {
+        target.set(
+            i,
+            new Requirement(
+                requirement.id(),
+                requirement.description(),
+                status,
+                reason,
+                supersededBy,
+                relatedAdr));
+        updated = true;
+        break;
+      }
+    }
+    if (!updated) {
+      throw new IllegalArgumentException("Unknown requirementId in spec " + spec.id() + ": " + requirementId);
+    }
     return spec(
         spec.id(),
         spec.title(),

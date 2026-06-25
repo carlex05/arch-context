@@ -74,6 +74,7 @@ class ArchContextMcpServerTest {
             "create_guideline",
             "upsert_guideline",
             "upsert_spec_requirement",
+            "deprecate_spec_requirement",
             "upsert_spec_acceptance_criterion",
             "add_spec_out_of_scope_item",
             "upsert_spec_constraint",
@@ -85,6 +86,7 @@ class ArchContextMcpServerTest {
             "create_adr",
             "upsert_adr",
             "upsert_adr_consequence",
+            "update_adr_status",
             "validate_workspace",
             "validate_spec_repository_coverage"),
         tools.keySet());
@@ -147,6 +149,13 @@ class ArchContextMcpServerTest {
     assertRequired(tools.get("upsert_spec_requirement"), "requirementType");
     assertRequired(tools.get("upsert_spec_requirement"), "id");
     assertRequired(tools.get("upsert_spec_requirement"), "description");
+    assertRequired(tools.get("deprecate_spec_requirement"), "specId");
+    assertRequired(tools.get("deprecate_spec_requirement"), "requirementType");
+    assertRequired(tools.get("deprecate_spec_requirement"), "requirementId");
+    assertRequired(tools.get("deprecate_spec_requirement"), "status");
+    assertRequired(tools.get("deprecate_spec_requirement"), "reason");
+    assertProperty(tools.get("deprecate_spec_requirement"), "supersededBy");
+    assertProperty(tools.get("deprecate_spec_requirement"), "relatedAdr");
     assertRequired(tools.get("upsert_spec_acceptance_criterion"), "specId");
     assertRequired(tools.get("upsert_spec_acceptance_criterion"), "id");
     assertRequired(tools.get("upsert_spec_acceptance_criterion"), "description");
@@ -199,6 +208,10 @@ class ArchContextMcpServerTest {
     assertProperty(tools.get("upsert_adr"), "dryRun");
     assertRequired(tools.get("upsert_adr_consequence"), "adrId");
     assertRequired(tools.get("upsert_adr_consequence"), "consequence");
+    assertRequired(tools.get("update_adr_status"), "adrId");
+    assertRequired(tools.get("update_adr_status"), "status");
+    assertProperty(tools.get("update_adr_status"), "supersededBy");
+    assertProperty(tools.get("update_adr_status"), "note");
     assertProperty(tools.get("validate_workspace"), "strict");
     assertRequired(tools.get("validate_spec_repository_coverage"), "specId");
     assertProperty(tools.get("validate_spec_repository_coverage"), "strict");

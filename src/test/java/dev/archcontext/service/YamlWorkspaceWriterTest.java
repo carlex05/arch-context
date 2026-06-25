@@ -292,6 +292,52 @@ class YamlWorkspaceWriterTest {
   }
 
   @Test
+  void deprecateSpecRequirementKeepsRequirementButMarksItNonImplementable() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(specWithImplementationScope("SPEC-001", List.of("booking-api")), false);
+
+    WriteResult result =
+        writer.deprecateSpecRequirement(
+            "SPEC-001",
+            "functional",
+            "FR-001",
+            "superseded",
+            "Backend contract now uses the replacement flow.",
+            "FR-002",
+            "ADR-002",
+            false);
+
+    assertTrue(result.changed());
+    Requirement requirement =
+        yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec.functionalRequirements().getFirst();
+    assertEquals("FR-001", requirement.id());
+    assertEquals("superseded", requirement.status());
+    assertEquals("Backend contract now uses the replacement flow.", requirement.obsoleteReason());
+    assertEquals("FR-002", requirement.supersededBy());
+    assertFalse(requirement.implementable());
+  }
+
+  @Test
+  void deprecateSpecRequirementRejectsUnknownRequirement() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(specWithImplementationScope("SPEC-001", List.of("booking-api")), false);
+
+    WriteResult result =
+        writer.deprecateSpecRequirement(
+            "SPEC-001",
+            "functional",
+            "FR-404",
+            "obsolete",
+            "No longer needed.",
+            null,
+            null,
+            false);
+
+    assertFalse(result.changed());
+    assertTrue(result.validation().errors().stream().anyMatch(e -> e.contains("FR-404")));
+  }
+
+  @Test
   void upsertSpecRequirementReindexesOnlyChangedSpec() throws Exception {
     writer.upsertRepository(repository("booking-api", "Booking API"), false);
     writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
@@ -586,6 +632,29 @@ class YamlWorkspaceWriterTest {
   }
 
   @Test
+  void validateWorkspaceIgnoresDeprecatedRequirementsForCoverage() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(specWithImplementationScope("SPEC-001", List.of("booking-api")), false);
+    writer.deprecateSpecRequirement(
+        "SPEC-001",
+        "nonFunctional",
+        "NFR-001",
+        "obsolete",
+        "Latency requirement moved to platform standard.",
+        null,
+        null,
+        false);
+    writer.upsertSpecRepositoryChange(
+        "SPEC-001", repositoryChange("booking-api", List.of("FR-001"), List.of("AC-001")), false);
+
+    WriteValidation result = writer.validateWorkspace(true);
+
+    assertFalse(
+        result.errors().stream()
+            .anyMatch(e -> e.contains("Requirement is not assigned") && e.contains("NFR-001")));
+  }
+
+  @Test
   void validateWorkspaceDetectsUnknownRepositoryReference() throws Exception {
     writer.createSpec(spec("SPEC-001", List.of("unknown-api")), true);
     Path specPath = root.resolve(".archcontext/specs/spec-001.yaml");
@@ -731,6 +800,26 @@ class YamlWorkspaceWriterTest {
     assertTrue(
         yaml.read(root.resolve(".archcontext/adrs/adr-001.yaml")).adr.consequences().stream()
             .anyMatch(c -> c.contains("yyyy-MM-dd")));
+  }
+
+  @Test
+  void updateAdrStatusMarksAdrAsSuperseded() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createAdr(adr("ADR-001", List.of("booking-api"), List.of()), false);
+
+    WriteResult result =
+        writer.updateAdrStatus(
+            "ADR-001",
+            "superseded",
+            "ADR-002",
+            "Replaced by the new contract boundary decision.",
+            false);
+
+    assertTrue(result.changed());
+    Adr adr = yaml.read(root.resolve(".archcontext/adrs/adr-001.yaml")).adr;
+    assertEquals("superseded", adr.status());
+    assertEquals("ADR-002", adr.supersededBy());
+    assertEquals("Replaced by the new contract boundary decision.", adr.statusNote());
   }
 
   @Test

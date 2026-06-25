@@ -420,6 +420,43 @@ public class ArchContextMcpServer {
                         requiredString(args, "id"), requiredString(args, "description")),
                     bool(args.get("dryRun")))),
         tool(
+            "deprecate_spec_requirement",
+            "Mark one existing functional or non-functional requirement as obsolete, superseded,"
+                + " or rejected without deleting it.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "requirementType",
+                    stringProperty("functional or nonFunctional"),
+                    "requirementId",
+                    stringProperty("Requirement id"),
+                    "status",
+                    stringProperty("obsolete, superseded, or rejected"),
+                    "reason",
+                    stringProperty("Reason why the requirement is no longer implementable"),
+                    "supersededBy",
+                    stringProperty("Optional replacement requirement id"),
+                    "relatedAdr",
+                    stringProperty("Optional ADR id that records the decision"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "specId",
+                "requirementType",
+                "requirementId",
+                "status",
+                "reason"),
+            args ->
+                writer.deprecateSpecRequirement(
+                    requiredString(args, "specId"),
+                    requiredString(args, "requirementType"),
+                    requiredString(args, "requirementId"),
+                    requiredString(args, "status"),
+                    requiredString(args, "reason"),
+                    optionalString(args, "supersededBy"),
+                    optionalString(args, "relatedAdr"),
+                    bool(args.get("dryRun")))),
+        tool(
             "upsert_spec_acceptance_criterion",
             "Add or update one acceptance criterion in an existing spec YAML.",
             strictObjectSchema(
@@ -649,6 +686,30 @@ public class ArchContextMcpServer {
                     requiredString(args, "consequence"),
                     bool(args.get("dryRun")))),
         tool(
+            "update_adr_status",
+            "Update an existing ADR status without rewriting the full ADR.",
+            strictObjectSchema(
+                Map.of(
+                    "adrId",
+                    stringProperty("ADR id"),
+                    "status",
+                    stringProperty("proposed, accepted, deprecated, or superseded"),
+                    "supersededBy",
+                    stringProperty("Optional replacement ADR id"),
+                    "note",
+                    stringProperty("Optional status change note"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "adrId",
+                "status"),
+            args ->
+                writer.updateAdrStatus(
+                    requiredString(args, "adrId"),
+                    requiredString(args, "status"),
+                    optionalString(args, "supersededBy"),
+                    optionalString(args, "note"),
+                    bool(args.get("dryRun")))),
+        tool(
             "validate_workspace",
             "Validate repository references, component references, active spec readiness, related"
                 + " ADR references, and supported schema versions without writing files.",
@@ -834,6 +895,8 @@ public class ArchContextMcpServer {
         Map.entry("date", stringProperty("ADR date")),
         Map.entry("context", stringProperty("ADR context")),
         Map.entry("decision", stringProperty("ADR decision")),
+        Map.entry("supersededBy", stringProperty("Replacement ADR id")),
+        Map.entry("statusNote", stringProperty("ADR status note")),
         Map.entry("consequences", stringArrayProperty("ADR consequences")),
         Map.entry("affectedRepositories", stringArrayProperty("Affected repository ids")),
         Map.entry("relatedSpecs", stringArrayProperty("Related spec ids")),
@@ -1035,6 +1098,8 @@ public class ArchContextMcpServer {
         requiredString(args, "date"),
         requiredString(args, "context"),
         requiredString(args, "decision"),
+        optionalString(args, "supersededBy"),
+        optionalString(args, "statusNote"),
         stringList(args.get("consequences")),
         stringList(args.get("affectedRepositories")),
         stringList(args.get("relatedSpecs")),

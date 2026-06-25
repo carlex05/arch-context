@@ -118,7 +118,22 @@ public final class Models {
 
   public record LocalRepositoryOverride(String path) {}
 
-  public record Requirement(String id, String description) {}
+  public record Requirement(
+      String id,
+      String description,
+      String status,
+      String obsoleteReason,
+      String supersededBy,
+      String relatedAdr) {
+    public Requirement(String id, String description) {
+      this(id, description, null, null, null, null);
+    }
+
+    public boolean implementable() {
+      String normalized = status == null || status.isBlank() ? "active" : status;
+      return "active".equalsIgnoreCase(normalized);
+    }
+  }
 
   public record AcceptanceCriterion(String id, String description) {}
 
@@ -279,10 +294,38 @@ public final class Models {
       String date,
       String context,
       String decision,
+      String supersededBy,
+      String statusNote,
       List<String> consequences,
       List<String> affectedRepositories,
       List<String> relatedSpecs,
-      String sourcePath) {}
+      String sourcePath) {
+    public Adr(
+        String id,
+        String title,
+        String status,
+        String date,
+        String context,
+        String decision,
+        List<String> consequences,
+        List<String> affectedRepositories,
+        List<String> relatedSpecs,
+        String sourcePath) {
+      this(
+          id,
+          title,
+          status,
+          date,
+          context,
+          decision,
+          null,
+          null,
+          consequences,
+          affectedRepositories,
+          relatedSpecs,
+          sourcePath);
+    }
+  }
 
   public record Guideline(
       String id,

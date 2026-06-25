@@ -128,8 +128,8 @@ public class McpContextService {
         summary(s),
         affected,
         rc,
-        nvl(s.functionalRequirements()),
-        nvl(s.nonFunctionalRequirements()),
+        implementableRequirements(s.functionalRequirements()),
+        implementableRequirements(s.nonFunctionalRequirements()),
         nvl(s.acceptanceCriteria()),
         nvl(s.constraints()),
         nvl(s.structuredConstraints()),
@@ -298,8 +298,13 @@ public class McpContextService {
 
   private List<Requirement> filterRequirements(
       List<Requirement> requirements, Set<String> applicableIds) {
-    if (applicableIds == null) return nvl(requirements);
-    return nvl(requirements).stream().filter(r -> applicableIds.contains(r.id())).toList();
+    Stream<Requirement> stream = nvl(requirements).stream().filter(Requirement::implementable);
+    if (applicableIds == null) return stream.toList();
+    return stream.filter(r -> applicableIds.contains(r.id())).toList();
+  }
+
+  private List<Requirement> implementableRequirements(List<Requirement> requirements) {
+    return nvl(requirements).stream().filter(Requirement::implementable).toList();
   }
 
   private List<AcceptanceCriterion> filterAcceptanceCriteria(

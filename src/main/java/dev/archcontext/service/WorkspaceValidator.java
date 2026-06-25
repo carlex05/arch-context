@@ -216,7 +216,7 @@ public class WorkspaceValidator {
           repositoryChanges.stream()
               .flatMap(c -> nvl(c.requirements()).stream())
               .collect(Collectors.toCollection(LinkedHashSet::new));
-      for (String requirementId : requirementIds(spec)) {
+      for (String requirementId : implementableRequirementIds(spec)) {
         if (!assignedRequirements.contains(requirementId)) {
           add(
               strict,
@@ -373,6 +373,17 @@ public class WorkspaceValidator {
     Set<String> ids = new LinkedHashSet<>();
     for (Requirement requirement : nvl(spec.functionalRequirements())) ids.add(requirement.id());
     for (Requirement requirement : nvl(spec.nonFunctionalRequirements())) ids.add(requirement.id());
+    return ids;
+  }
+
+  private Set<String> implementableRequirementIds(Spec spec) {
+    Set<String> ids = new LinkedHashSet<>();
+    for (Requirement requirement : nvl(spec.functionalRequirements())) {
+      if (requirement.implementable()) ids.add(requirement.id());
+    }
+    for (Requirement requirement : nvl(spec.nonFunctionalRequirements())) {
+      if (requirement.implementable()) ids.add(requirement.id());
+    }
     return ids;
   }
 
