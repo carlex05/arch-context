@@ -375,6 +375,11 @@ public class ArchContextMcpServer {
                     Map.entry("repositoryChanges", arrayProperty("Repository-scoped changes")),
                     Map.entry("metadata", Map.of("type", "object", "description", "Spec planning metadata")),
                     Map.entry("changeLog", arrayProperty("Structured spec change log")),
+                    Map.entry("supersededBy", stringProperty("Replacement spec id")),
+                    Map.entry("supersedes", stringArrayProperty("Superseded spec ids")),
+                    Map.entry("statusNote", stringProperty("Spec status note")),
+                    Map.entry("relatedSpecs", arrayProperty("Structured related spec links")),
+                    Map.entry("relatedAdrLinks", arrayProperty("Structured related ADR links")),
                     Map.entry("relatedAdrs", stringArrayProperty("Related ADR ids")),
                     Map.entry("dryRun", booleanProperty("Validate and preview without writing"))),
                 "id",
@@ -752,6 +757,125 @@ public class ArchContextMcpServer {
                 writer.appendSpecChange(
                     requiredString(args, "specId"), changeLogEntry(args), bool(args.get("dryRun")))),
         tool(
+            "supersede_spec",
+            "Mark one existing spec as superseded by another existing spec and link both specs.",
+            strictObjectSchema(
+                Map.of(
+                    "oldSpecId",
+                    stringProperty("Superseded spec id"),
+                    "newSpecId",
+                    stringProperty("Replacement spec id"),
+                    "reason",
+                    stringProperty("Reason for superseding"),
+                    "relatedAdr",
+                    stringProperty("Optional ADR id that records the decision"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "oldSpecId",
+                "newSpecId",
+                "reason"),
+            args ->
+                writer.supersedeSpec(
+                    requiredString(args, "oldSpecId"),
+                    requiredString(args, "newSpecId"),
+                    requiredString(args, "reason"),
+                    optionalString(args, "relatedAdr"),
+                    bool(args.get("dryRun")))),
+        tool(
+            "upsert_spec_related_adr",
+            "Add or update one structured ADR relation on a spec.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "adrId",
+                    stringProperty("Related ADR id"),
+                    "type",
+                    stringProperty("Relation type"),
+                    "note",
+                    stringProperty("Optional relation note"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "specId",
+                "adrId",
+                "type"),
+            args ->
+                writer.upsertSpecRelatedAdr(
+                    requiredString(args, "specId"),
+                    requiredString(args, "adrId"),
+                    requiredString(args, "type"),
+                    optionalString(args, "note"),
+                    bool(args.get("dryRun")))),
+        tool(
+            "deprecate_spec_related_adr",
+            "Mark one structured spec-to-ADR relation as deprecated.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "adrId",
+                    stringProperty("Related ADR id"),
+                    "reason",
+                    stringProperty("Reason for deprecating the relation"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "specId",
+                "adrId",
+                "reason"),
+            args ->
+                writer.deprecateSpecRelatedAdr(
+                    requiredString(args, "specId"),
+                    requiredString(args, "adrId"),
+                    requiredString(args, "reason"),
+                    bool(args.get("dryRun")))),
+        tool(
+            "upsert_spec_related_spec",
+            "Add or update one structured relation between specs.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "relatedSpecId",
+                    stringProperty("Related spec id"),
+                    "type",
+                    stringProperty("Relation type"),
+                    "note",
+                    stringProperty("Optional relation note"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "specId",
+                "relatedSpecId",
+                "type"),
+            args ->
+                writer.upsertSpecRelatedSpec(
+                    requiredString(args, "specId"),
+                    requiredString(args, "relatedSpecId"),
+                    requiredString(args, "type"),
+                    optionalString(args, "note"),
+                    bool(args.get("dryRun")))),
+        tool(
+            "deprecate_spec_related_spec",
+            "Mark one structured spec-to-spec relation as deprecated.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "relatedSpecId",
+                    stringProperty("Related spec id"),
+                    "reason",
+                    stringProperty("Reason for deprecating the relation"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "specId",
+                "relatedSpecId",
+                "reason"),
+            args ->
+                writer.deprecateSpecRelatedSpec(
+                    requiredString(args, "specId"),
+                    requiredString(args, "relatedSpecId"),
+                    requiredString(args, "reason"),
+                    bool(args.get("dryRun")))),
+        tool(
             "create_adr",
             "Create a new ADR YAML file under adrs/ using structured, validated input.",
             strictObjectSchema(
@@ -834,6 +958,28 @@ public class ArchContextMcpServer {
             args ->
                 writer.appendAdrChange(
                     requiredString(args, "adrId"), changeLogEntry(args), bool(args.get("dryRun")))),
+        tool(
+            "supersede_adr",
+            "Mark one existing ADR as superseded by another existing ADR and link both ADRs.",
+            strictObjectSchema(
+                Map.of(
+                    "oldAdrId",
+                    stringProperty("Superseded ADR id"),
+                    "newAdrId",
+                    stringProperty("Replacement ADR id"),
+                    "reason",
+                    stringProperty("Reason for superseding"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "oldAdrId",
+                "newAdrId",
+                "reason"),
+            args ->
+                writer.supersedeAdr(
+                    requiredString(args, "oldAdrId"),
+                    requiredString(args, "newAdrId"),
+                    requiredString(args, "reason"),
+                    bool(args.get("dryRun")))),
         tool(
             "validate_workspace",
             "Validate repository references, component references, active spec readiness, related"
@@ -1026,6 +1172,7 @@ public class ArchContextMcpServer {
         Map.entry("affectedRepositories", stringArrayProperty("Affected repository ids")),
         Map.entry("relatedSpecs", stringArrayProperty("Related spec ids")),
         Map.entry("changeLog", arrayProperty("Structured ADR change log")),
+        Map.entry("supersedes", stringArrayProperty("Superseded ADR ids")),
         Map.entry("dryRun", booleanProperty("Validate and preview without writing")));
   }
 
@@ -1168,6 +1315,11 @@ public class ArchContextMcpServer {
         list(args.get("repositoryChanges"), RepositoryChange.class),
         object(args.get("metadata"), SpecMetadata.class),
         list(args.get("changeLog"), ChangeLogEntry.class),
+        optionalString(args, "supersededBy"),
+        stringList(args.get("supersedes")),
+        optionalString(args, "statusNote"),
+        list(args.get("relatedSpecs"), SpecRelation.class),
+        list(args.get("relatedAdrLinks"), AdrRelation.class),
         stringList(args.get("relatedAdrs")),
         null);
   }
@@ -1241,6 +1393,7 @@ public class ArchContextMcpServer {
         stringList(args.get("affectedRepositories")),
         stringList(args.get("relatedSpecs")),
         list(args.get("changeLog"), ChangeLogEntry.class),
+        stringList(args.get("supersedes")),
         null);
   }
 

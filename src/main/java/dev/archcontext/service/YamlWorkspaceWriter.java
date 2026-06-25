@@ -541,6 +541,135 @@ public class YamlWorkspaceWriter {
         "Upserted change log entry " + change.id() + " for spec " + specId + ".");
   }
 
+  public WriteResult upsertSpecRelatedAdr(
+      String specId, String adrId, String type, String note, boolean dryRun) {
+    if (findAdrPath(adrId) == null) {
+      return result(false, dryRun, adrsDir(), "Spec related ADR was not written.", new WriteValidation(List.of("Unknown adrId: " + adrId), List.of()), null);
+    }
+    return updateSpec(
+        specId,
+        dryRun,
+        "Spec related ADR was not written.",
+        spec -> upsertSpecRelatedAdr(spec, adrId, type, "active", note),
+        "Upserted related ADR " + adrId + " for spec " + specId + ".");
+  }
+
+  public WriteResult deprecateSpecRelatedAdr(
+      String specId, String adrId, String reason, boolean dryRun) {
+    if (findAdrPath(adrId) == null) {
+      return result(false, dryRun, adrsDir(), "Spec related ADR status was not written.", new WriteValidation(List.of("Unknown adrId: " + adrId), List.of()), null);
+    }
+    return updateSpec(
+        specId,
+        dryRun,
+        "Spec related ADR status was not written.",
+        spec -> upsertSpecRelatedAdr(spec, adrId, "deprecated", "deprecated", reason),
+        "Deprecated related ADR " + adrId + " for spec " + specId + ".");
+  }
+
+  public WriteResult upsertSpecRelatedSpec(
+      String specId, String relatedSpecId, String type, String note, boolean dryRun) {
+    try {
+      if (findSpec(relatedSpecId) == null) {
+        return result(false, dryRun, specsDir(), "Spec relation was not written.", new WriteValidation(List.of("Unknown relatedSpecId: " + relatedSpecId), List.of()), null);
+      }
+    } catch (IOException e) {
+      return result(false, dryRun, specsDir(), "Spec relation was not written.", new WriteValidation(List.of(e.getMessage()), List.of()), null);
+    }
+    return updateSpec(
+        specId,
+        dryRun,
+        "Spec relation was not written.",
+        spec -> upsertSpecRelatedSpec(spec, relatedSpecId, type, "active", note),
+        "Upserted related spec " + relatedSpecId + " for spec " + specId + ".");
+  }
+
+  public WriteResult deprecateSpecRelatedSpec(
+      String specId, String relatedSpecId, String reason, boolean dryRun) {
+    try {
+      if (findSpec(relatedSpecId) == null) {
+        return result(false, dryRun, specsDir(), "Spec relation status was not written.", new WriteValidation(List.of("Unknown relatedSpecId: " + relatedSpecId), List.of()), null);
+      }
+    } catch (IOException e) {
+      return result(false, dryRun, specsDir(), "Spec relation status was not written.", new WriteValidation(List.of(e.getMessage()), List.of()), null);
+    }
+    return updateSpec(
+        specId,
+        dryRun,
+        "Spec relation status was not written.",
+        spec -> upsertSpecRelatedSpec(spec, relatedSpecId, "deprecated", "deprecated", reason),
+        "Deprecated related spec " + relatedSpecId + " for spec " + specId + ".");
+  }
+
+  public WriteResult supersedeSpec(
+      String oldSpecId, String newSpecId, String reason, String relatedAdr, boolean dryRun) {
+    try {
+      if (reason == null || reason.isBlank()) {
+        throw new IllegalArgumentException("reason is required.");
+      }
+      SpecFile oldFile = findSpec(oldSpecId);
+      SpecFile newFile = findSpec(newSpecId);
+      if (oldFile == null || newFile == null) {
+        List<String> errors = new ArrayList<>();
+        if (oldFile == null) errors.add("Unknown oldSpecId: " + oldSpecId);
+        if (newFile == null) errors.add("Unknown newSpecId: " + newSpecId);
+        return result(false, dryRun, specsDir(), "Spec superseding was not written.", new WriteValidation(errors, List.of()), null);
+      }
+      validator.validateKnownWriteTarget(root, oldFile.path());
+      validator.validateKnownWriteTarget(root, newFile.path());
+      Spec oldUpdated =
+          appendSpecChange(
+              updateSpecSuperseded(oldFile.document().spec, newSpecId, reason),
+              new ChangeLogEntry(
+                  "superseded-by-" + newSpecId,
+                  java.time.LocalDate.now().toString(),
+                  "Spec superseded by " + newSpecId + ".",
+                  reason,
+                  relatedAdr,
+                  null));
+      Spec newUpdated =
+          appendSpecChange(
+              updateSpecSupersedes(newFile.document().spec, oldSpecId),
+              new ChangeLogEntry(
+                  "supersedes-" + oldSpecId,
+                  java.time.LocalDate.now().toString(),
+                  "Spec supersedes " + oldSpecId + ".",
+                  reason,
+                  relatedAdr,
+                  null));
+      WriteValidation oldValidation = validator.validateSpec(root, oldUpdated);
+      WriteValidation newValidation = validator.validateSpec(root, newUpdated);
+      WriteValidation validation =
+          new WriteValidation(
+              concat(oldValidation.errors(), newValidation.errors()),
+              concat(oldValidation.warnings(), newValidation.warnings()));
+      if (!validation.errors().isEmpty()) {
+        return result(false, dryRun, oldFile.path(), "Spec superseding was not written.", validation, oldUpdated);
+      }
+      boolean changed =
+          !oldUpdated.equals(oldFile.document().spec) || !newUpdated.equals(newFile.document().spec);
+      if (changed && !dryRun) {
+        oldFile.document().schemaVersion = "1.1";
+        oldFile.document().spec = oldUpdated;
+        newFile.document().schemaVersion = "1.1";
+        newFile.document().spec = newUpdated;
+        writeAtomically(oldFile.path(), oldFile.document());
+        writeAtomically(newFile.path(), newFile.document());
+        reindexSpec(oldFile.path(), oldSpecId);
+        reindexSpec(newFile.path(), newSpecId);
+      }
+      return result(
+          changed,
+          dryRun,
+          oldFile.path(),
+          changed ? "Superseded spec " + oldSpecId + " with " + newSpecId + "." : "No changes for spec superseding.",
+          validation,
+          Map.of("oldSpec", oldUpdated, "newSpec", newUpdated));
+    } catch (IOException | IllegalArgumentException e) {
+      return result(false, dryRun, specsDir(), "Spec superseding was not written.", new WriteValidation(List.of(e.getMessage()), List.of()), null);
+    }
+  }
+
   public WriteResult upsertAdrConsequence(
       String adrId, String consequence, boolean dryRun) {
     try {
@@ -569,6 +698,7 @@ public class YamlWorkspaceWriter {
               original.affectedRepositories(),
               original.relatedSpecs(),
               original.changeLog(),
+              original.supersedes(),
               original.sourcePath());
       WriteValidation validation = validator.validateAdr(root, updated);
       if (!validation.errors().isEmpty()) {
@@ -614,6 +744,7 @@ public class YamlWorkspaceWriter {
               original.affectedRepositories(),
               original.relatedSpecs(),
               original.changeLog(),
+              original.supersedes(),
               original.sourcePath());
       WriteValidation validation = validator.validateAdr(root, updated);
       if (!validation.errors().isEmpty()) {
@@ -660,6 +791,7 @@ public class YamlWorkspaceWriter {
               original.affectedRepositories(),
               original.relatedSpecs(),
               changeLog,
+              original.supersedes(),
               original.sourcePath());
       WriteValidation validation = validator.validateAdr(root, updated);
       if (!validation.errors().isEmpty()) {
@@ -677,6 +809,57 @@ public class YamlWorkspaceWriter {
     } catch (IOException | IllegalArgumentException e) {
       WriteValidation validation = new WriteValidation(List.of(e.getMessage()), List.of());
       return result(false, dryRun, adrsDir(), "ADR change log entry was not written.", validation, null);
+    }
+  }
+
+  public WriteResult supersedeAdr(
+      String oldAdrId, String newAdrId, String reason, boolean dryRun) {
+    try {
+      if (reason == null || reason.isBlank()) {
+        throw new IllegalArgumentException("reason is required.");
+      }
+      Path oldPath = findAdrPath(oldAdrId);
+      Path newPath = findAdrPath(newAdrId);
+      if (oldPath == null || newPath == null) {
+        List<String> errors = new ArrayList<>();
+        if (oldPath == null) errors.add("Unknown oldAdrId: " + oldAdrId);
+        if (newPath == null) errors.add("Unknown newAdrId: " + newAdrId);
+        return result(false, dryRun, adrsDir(), "ADR superseding was not written.", new WriteValidation(errors, List.of()), null);
+      }
+      validator.validateKnownWriteTarget(root, oldPath);
+      validator.validateKnownWriteTarget(root, newPath);
+      YamlDocuments oldDoc = yaml.read(oldPath);
+      YamlDocuments newDoc = yaml.read(newPath);
+      Adr oldUpdated = updateAdrSuperseded(oldDoc.adr, newAdrId, reason);
+      Adr newUpdated = updateAdrSupersedes(newDoc.adr, oldAdrId, reason);
+      WriteValidation oldValidation = validator.validateAdr(root, oldUpdated);
+      WriteValidation newValidation = validator.validateAdr(root, newUpdated);
+      WriteValidation validation =
+          new WriteValidation(
+              concat(oldValidation.errors(), newValidation.errors()),
+              concat(oldValidation.warnings(), newValidation.warnings()));
+      if (!validation.errors().isEmpty()) {
+        return result(false, dryRun, oldPath, "ADR superseding was not written.", validation, oldUpdated);
+      }
+      boolean changed = !oldUpdated.equals(oldDoc.adr) || !newUpdated.equals(newDoc.adr);
+      if (changed && !dryRun) {
+        oldDoc.schemaVersion = "1.1";
+        oldDoc.adr = oldUpdated;
+        newDoc.schemaVersion = "1.1";
+        newDoc.adr = newUpdated;
+        writeAtomically(oldPath, oldDoc);
+        writeAtomically(newPath, newDoc);
+        reindex();
+      }
+      return result(
+          changed,
+          dryRun,
+          oldPath,
+          changed ? "Superseded ADR " + oldAdrId + " with " + newAdrId + "." : "No changes for ADR superseding.",
+          validation,
+          Map.of("oldAdr", oldUpdated, "newAdr", newUpdated));
+    } catch (IOException | IllegalArgumentException e) {
+      return result(false, dryRun, adrsDir(), "ADR superseding was not written.", new WriteValidation(List.of(e.getMessage()), List.of()), null);
     }
   }
 
@@ -827,6 +1010,11 @@ public class YamlWorkspaceWriter {
         nvl(spec.repositoryChanges()),
         spec.metadata(),
         nvl(spec.changeLog()),
+        spec.supersededBy(),
+        nvl(spec.supersedes()),
+        spec.statusNote(),
+        nvl(spec.relatedSpecs()),
+        nvl(spec.relatedAdrLinks()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -886,6 +1074,11 @@ public class YamlWorkspaceWriter {
         nvl(spec.repositoryChanges()),
         spec.metadata(),
         nvl(spec.changeLog()),
+        spec.supersededBy(),
+        nvl(spec.supersedes()),
+        spec.statusNote(),
+        nvl(spec.relatedSpecs()),
+        nvl(spec.relatedAdrLinks()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -940,6 +1133,11 @@ public class YamlWorkspaceWriter {
         nvl(spec.repositoryChanges()),
         spec.metadata(),
         nvl(spec.changeLog()),
+        spec.supersededBy(),
+        nvl(spec.supersedes()),
+        spec.statusNote(),
+        nvl(spec.relatedSpecs()),
+        nvl(spec.relatedAdrLinks()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -968,6 +1166,11 @@ public class YamlWorkspaceWriter {
         nvl(spec.repositoryChanges()),
         spec.metadata(),
         nvl(spec.changeLog()),
+        spec.supersededBy(),
+        nvl(spec.supersedes()),
+        spec.statusNote(),
+        nvl(spec.relatedSpecs()),
+        nvl(spec.relatedAdrLinks()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -997,6 +1200,11 @@ public class YamlWorkspaceWriter {
         nvl(spec.repositoryChanges()),
         spec.metadata(),
         nvl(spec.changeLog()),
+        spec.supersededBy(),
+        nvl(spec.supersedes()),
+        spec.statusNote(),
+        nvl(spec.relatedSpecs()),
+        nvl(spec.relatedAdrLinks()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -1025,6 +1233,11 @@ public class YamlWorkspaceWriter {
         nvl(spec.repositoryChanges()),
         spec.metadata(),
         nvl(spec.changeLog()),
+        spec.supersededBy(),
+        nvl(spec.supersedes()),
+        spec.statusNote(),
+        nvl(spec.relatedSpecs()),
+        nvl(spec.relatedAdrLinks()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -1079,6 +1292,11 @@ public class YamlWorkspaceWriter {
         nvl(spec.repositoryChanges()),
         spec.metadata(),
         nvl(spec.changeLog()),
+        spec.supersededBy(),
+        nvl(spec.supersedes()),
+        spec.statusNote(),
+        nvl(spec.relatedSpecs()),
+        nvl(spec.relatedAdrLinks()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -1116,6 +1334,11 @@ public class YamlWorkspaceWriter {
         repositoryChanges,
         spec.metadata(),
         nvl(spec.changeLog()),
+        spec.supersededBy(),
+        nvl(spec.supersedes()),
+        spec.statusNote(),
+        nvl(spec.relatedSpecs()),
+        nvl(spec.relatedAdrLinks()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -1144,6 +1367,11 @@ public class YamlWorkspaceWriter {
         nvl(spec.repositoryChanges()),
         spec.metadata(),
         nvl(spec.changeLog()),
+        spec.supersededBy(),
+        nvl(spec.supersedes()),
+        spec.statusNote(),
+        nvl(spec.relatedSpecs()),
+        nvl(spec.relatedAdrLinks()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -1169,6 +1397,11 @@ public class YamlWorkspaceWriter {
         nvl(spec.repositoryChanges()),
         spec.metadata(),
         nvl(spec.changeLog()),
+        spec.supersededBy(),
+        nvl(spec.supersedes()),
+        spec.statusNote(),
+        nvl(spec.relatedSpecs()),
+        nvl(spec.relatedAdrLinks()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -1194,6 +1427,11 @@ public class YamlWorkspaceWriter {
         nvl(spec.repositoryChanges()),
         metadata,
         nvl(spec.changeLog()),
+        spec.supersededBy(),
+        nvl(spec.supersedes()),
+        spec.statusNote(),
+        nvl(spec.relatedSpecs()),
+        nvl(spec.relatedAdrLinks()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -1220,6 +1458,11 @@ public class YamlWorkspaceWriter {
         nvl(spec.repositoryChanges()),
         spec.metadata(),
         nvl(spec.changeLog()),
+        spec.supersededBy(),
+        nvl(spec.supersedes()),
+        spec.statusNote(),
+        nvl(spec.relatedSpecs()),
+        nvl(spec.relatedAdrLinks()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -1246,8 +1489,192 @@ public class YamlWorkspaceWriter {
         nvl(spec.repositoryChanges()),
         spec.metadata(),
         upsertChange(spec.changeLog(), change),
+        spec.supersededBy(),
+        nvl(spec.supersedes()),
+        spec.statusNote(),
+        nvl(spec.relatedSpecs()),
+        nvl(spec.relatedAdrLinks()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
+  }
+
+  private Spec updateSpecSuperseded(Spec spec, String newSpecId, String reason) {
+    return spec(
+        spec.id(),
+        spec.title(),
+        "superseded",
+        spec.owner(),
+        spec.problem(),
+        spec.businessGoal(),
+        nvl(spec.affectedRepositories()),
+        nvl(spec.affectedBoundedContexts()),
+        nvl(spec.functionalRequirements()),
+        nvl(spec.nonFunctionalRequirements()),
+        nvl(spec.acceptanceCriteria()),
+        nvl(spec.constraints()),
+        nvl(spec.structuredConstraints()),
+        nvl(spec.affectedComponents()),
+        nvl(spec.outOfScope()),
+        nvl(spec.openQuestions()),
+        nvl(spec.repositoryChanges()),
+        spec.metadata(),
+        nvl(spec.changeLog()),
+        newSpecId,
+        nvl(spec.supersedes()),
+        reason,
+        upsertSpecRelation(spec.relatedSpecs(), new SpecRelation(newSpecId, "superseded-by", "active", reason)),
+        nvl(spec.relatedAdrLinks()),
+        nvl(spec.relatedAdrs()),
+        spec.sourcePath());
+  }
+
+  private Spec updateSpecSupersedes(Spec spec, String oldSpecId) {
+    List<String> supersedes = addUnique(spec.supersedes(), oldSpecId);
+    return spec(
+        spec.id(),
+        spec.title(),
+        spec.status(),
+        spec.owner(),
+        spec.problem(),
+        spec.businessGoal(),
+        nvl(spec.affectedRepositories()),
+        nvl(spec.affectedBoundedContexts()),
+        nvl(spec.functionalRequirements()),
+        nvl(spec.nonFunctionalRequirements()),
+        nvl(spec.acceptanceCriteria()),
+        nvl(spec.constraints()),
+        nvl(spec.structuredConstraints()),
+        nvl(spec.affectedComponents()),
+        nvl(spec.outOfScope()),
+        nvl(spec.openQuestions()),
+        nvl(spec.repositoryChanges()),
+        spec.metadata(),
+        nvl(spec.changeLog()),
+        spec.supersededBy(),
+        supersedes,
+        spec.statusNote(),
+        upsertSpecRelation(spec.relatedSpecs(), new SpecRelation(oldSpecId, "supersedes", "active", null)),
+        nvl(spec.relatedAdrLinks()),
+        nvl(spec.relatedAdrs()),
+        spec.sourcePath());
+  }
+
+  private Spec upsertSpecRelatedAdr(
+      Spec spec, String adrId, String type, String status, String note) {
+    if (adrId == null || adrId.isBlank()) throw new IllegalArgumentException("adrId is required.");
+    return spec(
+        spec.id(),
+        spec.title(),
+        spec.status(),
+        spec.owner(),
+        spec.problem(),
+        spec.businessGoal(),
+        nvl(spec.affectedRepositories()),
+        nvl(spec.affectedBoundedContexts()),
+        nvl(spec.functionalRequirements()),
+        nvl(spec.nonFunctionalRequirements()),
+        nvl(spec.acceptanceCriteria()),
+        nvl(spec.constraints()),
+        nvl(spec.structuredConstraints()),
+        nvl(spec.affectedComponents()),
+        nvl(spec.outOfScope()),
+        nvl(spec.openQuestions()),
+        nvl(spec.repositoryChanges()),
+        spec.metadata(),
+        nvl(spec.changeLog()),
+        spec.supersededBy(),
+        nvl(spec.supersedes()),
+        spec.statusNote(),
+        nvl(spec.relatedSpecs()),
+        upsertAdrRelation(spec.relatedAdrLinks(), new AdrRelation(adrId, type, status, note)),
+        addUnique(spec.relatedAdrs(), adrId),
+        spec.sourcePath());
+  }
+
+  private Spec upsertSpecRelatedSpec(
+      Spec spec, String relatedSpecId, String type, String status, String note) {
+    if (relatedSpecId == null || relatedSpecId.isBlank()) {
+      throw new IllegalArgumentException("relatedSpecId is required.");
+    }
+    return spec(
+        spec.id(),
+        spec.title(),
+        spec.status(),
+        spec.owner(),
+        spec.problem(),
+        spec.businessGoal(),
+        nvl(spec.affectedRepositories()),
+        nvl(spec.affectedBoundedContexts()),
+        nvl(spec.functionalRequirements()),
+        nvl(spec.nonFunctionalRequirements()),
+        nvl(spec.acceptanceCriteria()),
+        nvl(spec.constraints()),
+        nvl(spec.structuredConstraints()),
+        nvl(spec.affectedComponents()),
+        nvl(spec.outOfScope()),
+        nvl(spec.openQuestions()),
+        nvl(spec.repositoryChanges()),
+        spec.metadata(),
+        nvl(spec.changeLog()),
+        spec.supersededBy(),
+        nvl(spec.supersedes()),
+        spec.statusNote(),
+        upsertSpecRelation(spec.relatedSpecs(), new SpecRelation(relatedSpecId, type, status, note)),
+        nvl(spec.relatedAdrLinks()),
+        nvl(spec.relatedAdrs()),
+        spec.sourcePath());
+  }
+
+  private Adr updateAdrSuperseded(Adr adr, String newAdrId, String reason) {
+    return new Adr(
+        adr.id(),
+        adr.title(),
+        "superseded",
+        adr.date(),
+        adr.context(),
+        adr.decision(),
+        newAdrId,
+        reason,
+        adr.consequences(),
+        adr.affectedRepositories(),
+        adr.relatedSpecs(),
+        upsertChange(
+            adr.changeLog(),
+            new ChangeLogEntry(
+                "superseded-by-" + newAdrId,
+                java.time.LocalDate.now().toString(),
+                "ADR superseded by " + newAdrId + ".",
+                reason,
+                newAdrId,
+                null)),
+        adr.supersedes(),
+        adr.sourcePath());
+  }
+
+  private Adr updateAdrSupersedes(Adr adr, String oldAdrId, String reason) {
+    return new Adr(
+        adr.id(),
+        adr.title(),
+        adr.status(),
+        adr.date(),
+        adr.context(),
+        adr.decision(),
+        adr.supersededBy(),
+        adr.statusNote(),
+        adr.consequences(),
+        adr.affectedRepositories(),
+        adr.relatedSpecs(),
+        upsertChange(
+            adr.changeLog(),
+            new ChangeLogEntry(
+                "supersedes-" + oldAdrId,
+                java.time.LocalDate.now().toString(),
+                "ADR supersedes " + oldAdrId + ".",
+                reason,
+                oldAdrId,
+                null)),
+        addUnique(adr.supersedes(), oldAdrId),
+        adr.sourcePath());
   }
 
   private List<ChangeLogEntry> upsertChange(List<ChangeLogEntry> existing, ChangeLogEntry change) {
@@ -1255,6 +1682,28 @@ public class YamlWorkspaceWriter {
     changes.removeIf(c -> change.id().equals(c.id()));
     changes.add(change);
     return changes;
+  }
+
+  private List<SpecRelation> upsertSpecRelation(List<SpecRelation> existing, SpecRelation relation) {
+    List<SpecRelation> relations = new ArrayList<>(nvl(existing));
+    relations.removeIf(r -> relation.specId().equals(r.specId()));
+    relations.add(relation);
+    return relations;
+  }
+
+  private List<AdrRelation> upsertAdrRelation(List<AdrRelation> existing, AdrRelation relation) {
+    List<AdrRelation> relations = new ArrayList<>(nvl(existing));
+    relations.removeIf(r -> relation.adrId().equals(r.adrId()));
+    relations.add(relation);
+    return relations;
+  }
+
+  private List<String> addUnique(List<String> existing, String value) {
+    List<String> values = new ArrayList<>(nvl(existing));
+    if (value != null && !value.isBlank() && values.stream().noneMatch(value::equals)) {
+      values.add(value);
+    }
+    return values;
   }
 
   private void validateChangeLogEntry(ChangeLogEntry change) {
@@ -1299,6 +1748,11 @@ public class YamlWorkspaceWriter {
       List<RepositoryChange> repositoryChanges,
       SpecMetadata metadata,
       List<ChangeLogEntry> changeLog,
+      String supersededBy,
+      List<String> supersedes,
+      String statusNote,
+      List<SpecRelation> relatedSpecs,
+      List<AdrRelation> relatedAdrLinks,
       List<String> relatedAdrs,
       String sourcePath) {
     return new Spec(
@@ -1321,6 +1775,11 @@ public class YamlWorkspaceWriter {
         repositoryChanges,
         metadata,
         changeLog,
+        supersededBy,
+        supersedes,
+        statusNote,
+        relatedSpecs,
+        relatedAdrLinks,
         relatedAdrs,
         sourcePath);
   }

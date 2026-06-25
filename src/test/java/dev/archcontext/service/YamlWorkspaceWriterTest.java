@@ -643,6 +643,64 @@ class YamlWorkspaceWriterTest {
   }
 
   @Test
+  void supersedeSpecLinksOldAndNewSpecs() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
+    writer.createSpec(spec("SPEC-002", List.of("booking-api")), false);
+
+    WriteResult result =
+        writer.supersedeSpec(
+            "SPEC-001", "SPEC-002", "Replacement scope is clearer.", "ADR-002", false);
+
+    assertTrue(result.changed());
+    Spec oldSpec = yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec;
+    Spec newSpec = yaml.read(root.resolve(".archcontext/specs/spec-002.yaml")).spec;
+    assertEquals("superseded", oldSpec.status());
+    assertEquals("SPEC-002", oldSpec.supersededBy());
+    assertEquals("Replacement scope is clearer.", oldSpec.statusNote());
+    assertEquals(List.of("SPEC-001"), newSpec.supersedes());
+    assertTrue(
+        newSpec.relatedSpecs().stream()
+            .anyMatch(r -> r.specId().equals("SPEC-001") && r.type().equals("supersedes")));
+  }
+
+  @Test
+  void upsertAndDeprecateSpecRelatedAdr() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
+    writer.createAdr(adr("ADR-001", List.of("booking-api"), List.of("SPEC-001")), false);
+
+    writer.upsertSpecRelatedAdr("SPEC-001", "ADR-001", "decision", "Initial decision.", false);
+    WriteResult result =
+        writer.deprecateSpecRelatedAdr("SPEC-001", "ADR-001", "No longer applicable.", false);
+
+    assertTrue(result.changed());
+    AdrRelation relation =
+        yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec.relatedAdrLinks().getFirst();
+    assertEquals("ADR-001", relation.adrId());
+    assertEquals("deprecated", relation.status());
+    assertEquals("No longer applicable.", relation.note());
+  }
+
+  @Test
+  void upsertAndDeprecateSpecRelatedSpec() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
+    writer.createSpec(spec("SPEC-002", List.of("booking-api")), false);
+
+    writer.upsertSpecRelatedSpec("SPEC-001", "SPEC-002", "informs", "Read before work.", false);
+    WriteResult result =
+        writer.deprecateSpecRelatedSpec("SPEC-001", "SPEC-002", "No longer related.", false);
+
+    assertTrue(result.changed());
+    SpecRelation relation =
+        yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec.relatedSpecs().getFirst();
+    assertEquals("SPEC-002", relation.specId());
+    assertEquals("deprecated", relation.status());
+    assertEquals("No longer related.", relation.note());
+  }
+
+  @Test
   void upsertSpecRepositoryChangeUpdatesByRepositoryId() throws Exception {
     writer.upsertRepository(repository("booking-api", "Booking API"), false);
     writer.createSpec(specWithImplementationScope("SPEC-001", List.of("booking-api")), false);
@@ -977,6 +1035,25 @@ class YamlWorkspaceWriterTest {
         yaml.read(root.resolve(".archcontext/adrs/adr-001.yaml")).adr.changeLog().getFirst();
     assertEquals("CHG-ADR-001", change.id());
     assertEquals("ADR-002", change.relatedAdr());
+  }
+
+  @Test
+  void supersedeAdrLinksOldAndNewAdrs() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createAdr(adr("ADR-001", List.of("booking-api"), List.of()), false);
+    writer.createAdr(adr("ADR-002", List.of("booking-api"), List.of()), false);
+
+    WriteResult result =
+        writer.supersedeAdr("ADR-001", "ADR-002", "Newer decision replaces old boundary.", false);
+
+    assertTrue(result.changed());
+    Adr oldAdr = yaml.read(root.resolve(".archcontext/adrs/adr-001.yaml")).adr;
+    Adr newAdr = yaml.read(root.resolve(".archcontext/adrs/adr-002.yaml")).adr;
+    assertEquals("superseded", oldAdr.status());
+    assertEquals("ADR-002", oldAdr.supersededBy());
+    assertEquals(List.of("ADR-001"), newAdr.supersedes());
+    assertTrue(oldAdr.changeLog().stream().anyMatch(c -> c.id().equals("superseded-by-ADR-002")));
+    assertTrue(newAdr.changeLog().stream().anyMatch(c -> c.id().equals("supersedes-ADR-001")));
   }
 
   @Test

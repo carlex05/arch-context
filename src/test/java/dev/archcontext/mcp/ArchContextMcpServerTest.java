@@ -86,11 +86,17 @@ class ArchContextMcpServerTest {
             "upsert_spec_metadata",
             "upsert_spec_summary",
             "append_spec_change",
+            "supersede_spec",
+            "upsert_spec_related_adr",
+            "deprecate_spec_related_adr",
+            "upsert_spec_related_spec",
+            "deprecate_spec_related_spec",
             "create_adr",
             "upsert_adr",
             "upsert_adr_consequence",
             "update_adr_status",
             "append_adr_change",
+            "supersede_adr",
             "validate_workspace",
             "validate_spec_repository_coverage"),
         tools.keySet());
@@ -212,6 +218,21 @@ class ArchContextMcpServerTest {
     assertRequired(tools.get("append_spec_change"), "reason");
     assertProperty(tools.get("append_spec_change"), "relatedAdr");
     assertProperty(tools.get("append_spec_change"), "changedBy");
+    assertRequired(tools.get("supersede_spec"), "oldSpecId");
+    assertRequired(tools.get("supersede_spec"), "newSpecId");
+    assertRequired(tools.get("supersede_spec"), "reason");
+    assertRequired(tools.get("upsert_spec_related_adr"), "specId");
+    assertRequired(tools.get("upsert_spec_related_adr"), "adrId");
+    assertRequired(tools.get("upsert_spec_related_adr"), "type");
+    assertRequired(tools.get("deprecate_spec_related_adr"), "specId");
+    assertRequired(tools.get("deprecate_spec_related_adr"), "adrId");
+    assertRequired(tools.get("deprecate_spec_related_adr"), "reason");
+    assertRequired(tools.get("upsert_spec_related_spec"), "specId");
+    assertRequired(tools.get("upsert_spec_related_spec"), "relatedSpecId");
+    assertRequired(tools.get("upsert_spec_related_spec"), "type");
+    assertRequired(tools.get("deprecate_spec_related_spec"), "specId");
+    assertRequired(tools.get("deprecate_spec_related_spec"), "relatedSpecId");
+    assertRequired(tools.get("deprecate_spec_related_spec"), "reason");
     assertRequired(tools.get("create_adr"), "id");
     assertRequired(tools.get("create_adr"), "title");
     assertRequired(tools.get("create_adr"), "status");
@@ -242,6 +263,9 @@ class ArchContextMcpServerTest {
     assertRequired(tools.get("append_adr_change"), "reason");
     assertProperty(tools.get("append_adr_change"), "relatedAdr");
     assertProperty(tools.get("append_adr_change"), "changedBy");
+    assertRequired(tools.get("supersede_adr"), "oldAdrId");
+    assertRequired(tools.get("supersede_adr"), "newAdrId");
+    assertRequired(tools.get("supersede_adr"), "reason");
     assertProperty(tools.get("validate_workspace"), "strict");
     assertRequired(tools.get("validate_spec_repository_coverage"), "specId");
     assertProperty(tools.get("validate_spec_repository_coverage"), "strict");

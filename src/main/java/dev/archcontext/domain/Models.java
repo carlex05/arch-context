@@ -202,6 +202,18 @@ public final class Models {
   public record ChangeLogEntry(
       String id, String date, String summary, String reason, String relatedAdr, String changedBy) {}
 
+  public record SpecRelation(String specId, String type, String status, String note) {
+    public boolean active() {
+      return status == null || status.isBlank() || "active".equalsIgnoreCase(status);
+    }
+  }
+
+  public record AdrRelation(String adrId, String type, String status, String note) {
+    public boolean active() {
+      return status == null || status.isBlank() || "active".equalsIgnoreCase(status);
+    }
+  }
+
   public record Spec(
       String id,
       String title,
@@ -222,6 +234,11 @@ public final class Models {
       List<RepositoryChange> repositoryChanges,
       SpecMetadata metadata,
       List<ChangeLogEntry> changeLog,
+      String supersededBy,
+      List<String> supersedes,
+      String statusNote,
+      List<SpecRelation> relatedSpecs,
+      List<AdrRelation> relatedAdrLinks,
       List<String> relatedAdrs,
       String sourcePath) {
     public Spec {
@@ -239,6 +256,9 @@ public final class Models {
       openQuestions = openQuestions == null ? List.of() : openQuestions;
       repositoryChanges = repositoryChanges == null ? List.of() : repositoryChanges;
       changeLog = changeLog == null ? List.of() : changeLog;
+      supersedes = supersedes == null ? List.of() : supersedes;
+      relatedSpecs = relatedSpecs == null ? List.of() : relatedSpecs;
+      relatedAdrLinks = relatedAdrLinks == null ? List.of() : relatedAdrLinks;
       relatedAdrs = relatedAdrs == null ? List.of() : relatedAdrs;
     }
 
@@ -281,6 +301,11 @@ public final class Models {
           List.of(),
           null,
           List.of(),
+          null,
+          List.of(),
+          null,
+          List.of(),
+          List.of(),
           relatedAdrs,
           sourcePath);
     }
@@ -320,6 +345,11 @@ public final class Models {
           List.of(),
           null,
           List.of(),
+          null,
+          List.of(),
+          null,
+          List.of(),
+          List.of(),
           relatedAdrs,
           sourcePath);
     }
@@ -338,9 +368,11 @@ public final class Models {
       List<String> affectedRepositories,
       List<String> relatedSpecs,
       List<ChangeLogEntry> changeLog,
+      List<String> supersedes,
       String sourcePath) {
     public Adr {
       changeLog = changeLog == null ? List.of() : changeLog;
+      supersedes = supersedes == null ? List.of() : supersedes;
     }
 
     public Adr(
@@ -366,6 +398,7 @@ public final class Models {
           consequences,
           affectedRepositories,
           relatedSpecs,
+          List.of(),
           List.of(),
           sourcePath);
     }

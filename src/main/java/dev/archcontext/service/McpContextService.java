@@ -118,7 +118,7 @@ public class McpContextService {
         l.adrs().stream()
             .filter(
                 a ->
-                    nvl(s.relatedAdrs()).contains(a.id()) || nvl(a.relatedSpecs()).contains(s.id()))
+                    relatedAdrIds(s).contains(a.id()) || nvl(a.relatedSpecs()).contains(s.id()))
             .toList();
     List<Guideline> gs =
         repoId == null || repoId.isBlank()
@@ -164,7 +164,7 @@ public class McpContextService {
         l.adrs().stream()
             .filter(
                 a ->
-                    nvl(spec.relatedAdrs()).contains(a.id())
+                    relatedAdrIds(spec).contains(a.id())
                         || nvl(a.relatedSpecs()).contains(spec.id()))
             .toList();
     return new RepositoryImplementationContext(
@@ -325,6 +325,24 @@ public class McpContextService {
 
   private List<Constraint> implementableConstraints(List<Constraint> constraints) {
     return nvl(constraints).stream().filter(Constraint::implementable).toList();
+  }
+
+  private Set<String> relatedAdrIds(Spec spec) {
+    Set<String> structuredIds =
+        nvl(spec.relatedAdrLinks()).stream()
+            .map(AdrRelation::adrId)
+            .filter(id -> id != null && !id.isBlank())
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+    Set<String> ids =
+        nvl(spec.relatedAdrs()).stream()
+            .filter(id -> !structuredIds.contains(id))
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+    nvl(spec.relatedAdrLinks()).stream()
+        .filter(AdrRelation::active)
+        .map(AdrRelation::adrId)
+        .filter(id -> id != null && !id.isBlank())
+        .forEach(ids::add);
+    return ids;
   }
 
   private List<ChangeLogEntry> recentChangeLog(List<ChangeLogEntry> changeLog) {

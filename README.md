@@ -253,12 +253,16 @@ Current write tools:
 - `upsert_spec_metadata`: add or update planning metadata such as priority, effort, sprint, phase, and tags.
 - `upsert_spec_summary`: update existing spec summary fields such as title, owner, problem, or businessGoal.
 - `append_spec_change`: append or update one structured change-log entry in an existing spec.
+- `supersede_spec`: mark one existing spec as superseded by another existing spec and link both.
+- `upsert_spec_related_adr` / `deprecate_spec_related_adr`: manage structured spec-to-ADR relations.
+- `upsert_spec_related_spec` / `deprecate_spec_related_spec`: manage structured spec-to-spec relations.
 - `add_spec_out_of_scope_item`: add an out-of-scope item while avoiding duplicate descriptions.
 - `create_adr`: create one new ADR under `.archcontext/adrs/*.yaml`.
 - `upsert_adr`: create or update one ADR under `.archcontext/adrs/*.yaml`.
 - `upsert_adr_consequence`: add one consequence to an existing ADR.
 - `update_adr_status`: change one ADR status, optionally recording `supersededBy` and a status note.
 - `append_adr_change`: append or update one structured change-log entry in an existing ADR.
+- `supersede_adr`: mark one existing ADR as superseded by another existing ADR and link both.
 - `validate_spec_repository_coverage`: validate repositoryChanges coverage for one spec.
 - `validate_workspace`: validate repository references, component references, active spec readiness, related ADRs, and schema versions without writing files.
 
@@ -267,6 +271,8 @@ For Spec-Driven Development, acceptance criteria, constraints, repositoryChanges
 Requirements, acceptance criteria, and structured constraints marked as `obsolete`, `superseded`, or `rejected` remain in the spec YAML for traceability, but implementation-oriented context tools return only implementable items. Use `get_spec_context` when an agent needs the full historical record.
 
 Specs and ADRs can also carry a structured `changeLog`. Implementation-oriented context tools include only the most recent entries by default so agents see why the context changed without receiving the full audit trail on every call.
+
+Superseding tools link resources that already exist. Create the replacement spec or ADR first, then call `supersede_spec` or `supersede_adr` to update both sides and append traceability entries.
 
 Write tools are intentionally constrained:
 
@@ -598,6 +604,45 @@ Spec enrichment examples:
 
 ```json
 {
+  "name": "supersede_spec",
+  "arguments": {
+    "oldSpecId": "SPEC-002",
+    "newSpecId": "SPEC-002-v2",
+    "reason": "The workflow was re-scoped after backend contract changes.",
+    "relatedAdr": "ADR-006",
+    "dryRun": true
+  }
+}
+```
+
+```json
+{
+  "name": "upsert_spec_related_adr",
+  "arguments": {
+    "specId": "SPEC-002-v2",
+    "adrId": "ADR-006",
+    "type": "governs",
+    "note": "ADR-006 defines the replacement integration boundary.",
+    "dryRun": true
+  }
+}
+```
+
+```json
+{
+  "name": "upsert_spec_related_spec",
+  "arguments": {
+    "specId": "SPEC-002-v2",
+    "relatedSpecId": "SPEC-002",
+    "type": "supersedes",
+    "note": "SPEC-002-v2 replaces SPEC-002.",
+    "dryRun": true
+  }
+}
+```
+
+```json
+{
   "name": "update_spec_status",
   "arguments": {
     "specId": "SPEC-002",
@@ -632,6 +677,18 @@ Spec enrichment examples:
     "reason": "The previous integration boundary is no longer valid for new implementations.",
     "relatedAdr": "ADR-006",
     "changedBy": "architecture-agent",
+    "dryRun": true
+  }
+}
+```
+
+```json
+{
+  "name": "supersede_adr",
+  "arguments": {
+    "oldAdrId": "ADR-002",
+    "newAdrId": "ADR-006",
+    "reason": "ADR-006 replaces the previous integration boundary.",
     "dryRun": true
   }
 }
@@ -683,14 +740,16 @@ Example agent workflow:
 12. Use `deprecate_spec_acceptance_criterion` when an acceptance criterion is no longer valid.
 13. Use `deprecate_spec_constraint` when a structured constraint is no longer applicable.
 14. Use `append_spec_change` to record why the spec changed.
-15. Use `update_spec_status` when implementation reaches `review` or `done`.
-16. Use `upsert_adr_consequence` when implementation reveals a new consequence of an ADR.
-17. Use `update_adr_status` when an ADR becomes `deprecated` or `superseded`.
-18. Use `append_adr_change` to record why an ADR changed.
-19. Run `validate_spec_repository_coverage`.
-20. Run `validate_workspace`.
-21. Implementation agents call `get_agent_briefing_for_spec` for their `{ specId, repositoryId }`.
-22. Review the Git diff before committing shared `.archcontext` files.
+15. Use `supersede_spec` after creating a replacement spec.
+16. Use structured relation tools when a spec informs, supersedes, or is governed by another spec or ADR.
+17. Use `update_spec_status` when implementation reaches `review` or `done`.
+18. Use `upsert_adr_consequence` when implementation reveals a new consequence of an ADR.
+19. Use `update_adr_status` or `supersede_adr` when an ADR becomes `deprecated` or `superseded`.
+20. Use `append_adr_change` to record why an ADR changed.
+21. Run `validate_spec_repository_coverage`.
+22. Run `validate_workspace`.
+23. Implementation agents call `get_agent_briefing_for_spec` for their `{ specId, repositoryId }`.
+24. Review the Git diff before committing shared `.archcontext` files.
 
 ## MCP surface
 
@@ -743,12 +802,18 @@ Tools:
 - `upsert_spec_metadata`
 - `upsert_spec_summary`
 - `append_spec_change`
+- `supersede_spec`
+- `upsert_spec_related_adr`
+- `deprecate_spec_related_adr`
+- `upsert_spec_related_spec`
+- `deprecate_spec_related_spec`
 - `add_spec_out_of_scope_item`
 - `create_adr`
 - `upsert_adr`
 - `upsert_adr_consequence`
 - `update_adr_status`
 - `append_adr_change`
+- `supersede_adr`
 - `validate_spec_repository_coverage`
 - `validate_workspace`
 
