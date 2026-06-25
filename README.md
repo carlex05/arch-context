@@ -19,6 +19,8 @@ Modern software work often spans multiple repositories. Agents need more than th
 
 ArchContext explicitly supports one solution/workspace composed of multiple source code repositories.
 
+Current release notes are maintained in [CHANGELOG.md](CHANGELOG.md).
+
 ## 5-minute quickstart
 
 Requirements:

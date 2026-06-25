@@ -36,7 +36,7 @@ public record BuildInfo(
     return new BuildInfo(
         value(properties, "groupId", "dev.archcontext"),
         value(properties, "artifactId", "archcontext"),
-        value(properties, "version", "0.1.0-SNAPSHOT"),
+        value(properties, "version", "0.2.0"),
         value(properties, "gitCommit", "unknown"),
         value(properties, "buildTimestamp", "unknown"));
   }
