@@ -121,6 +121,50 @@ class ArchContextCoreTest {
   }
 
   @Test
+  void agentBriefingIncludesOnlyRecentSpecChanges() throws Exception {
+    writeWorkspace(dir);
+    Path specPath = dir.resolve(".archcontext/specs/SPEC-001.yaml");
+    String spec = Files.readString(specPath);
+    spec =
+        spec.replace(
+            "  relatedAdrs: [ADR-001]\n",
+            "  changeLog:\n"
+                + "    - id: CHG-001\n"
+                + "      date: \"2026-06-20\"\n"
+                + "      summary: Change 1.\n"
+                + "      reason: Reason 1.\n"
+                + "    - id: CHG-002\n"
+                + "      date: \"2026-06-21\"\n"
+                + "      summary: Change 2.\n"
+                + "      reason: Reason 2.\n"
+                + "    - id: CHG-003\n"
+                + "      date: \"2026-06-22\"\n"
+                + "      summary: Change 3.\n"
+                + "      reason: Reason 3.\n"
+                + "    - id: CHG-004\n"
+                + "      date: \"2026-06-23\"\n"
+                + "      summary: Change 4.\n"
+                + "      reason: Reason 4.\n"
+                + "    - id: CHG-005\n"
+                + "      date: \"2026-06-24\"\n"
+                + "      summary: Change 5.\n"
+                + "      reason: Reason 5.\n"
+                + "    - id: CHG-006\n"
+                + "      date: \"2026-06-25\"\n"
+                + "      summary: Change 6.\n"
+                + "      reason: Reason 6.\n"
+                + "  relatedAdrs: [ADR-001]\n");
+    Files.writeString(specPath, spec);
+
+    AgentBriefing briefing =
+        new McpContextService(dir).getAgentBriefingForSpec("SPEC-001", "booking-api");
+
+    assertEquals(
+        List.of("CHG-002", "CHG-003", "CHG-004", "CHG-005", "CHG-006"),
+        briefing.recentChanges().stream().map(ChangeLogEntry::id).toList());
+  }
+
+  @Test
   void workspaceValidationRequiresImportedDatabase() throws Exception {
     new WorkspaceService().init(dir);
 

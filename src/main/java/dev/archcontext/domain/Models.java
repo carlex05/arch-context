@@ -199,6 +199,9 @@ public final class Models {
     }
   }
 
+  public record ChangeLogEntry(
+      String id, String date, String summary, String reason, String relatedAdr, String changedBy) {}
+
   public record Spec(
       String id,
       String title,
@@ -218,6 +221,7 @@ public final class Models {
       List<OpenQuestion> openQuestions,
       List<RepositoryChange> repositoryChanges,
       SpecMetadata metadata,
+      List<ChangeLogEntry> changeLog,
       List<String> relatedAdrs,
       String sourcePath) {
     public Spec {
@@ -234,6 +238,7 @@ public final class Models {
       outOfScope = outOfScope == null ? List.of() : outOfScope;
       openQuestions = openQuestions == null ? List.of() : openQuestions;
       repositoryChanges = repositoryChanges == null ? List.of() : repositoryChanges;
+      changeLog = changeLog == null ? List.of() : changeLog;
       relatedAdrs = relatedAdrs == null ? List.of() : relatedAdrs;
     }
 
@@ -275,6 +280,7 @@ public final class Models {
           openQuestions,
           List.of(),
           null,
+          List.of(),
           relatedAdrs,
           sourcePath);
     }
@@ -313,6 +319,7 @@ public final class Models {
           List.of(),
           List.of(),
           null,
+          List.of(),
           relatedAdrs,
           sourcePath);
     }
@@ -330,7 +337,12 @@ public final class Models {
       List<String> consequences,
       List<String> affectedRepositories,
       List<String> relatedSpecs,
+      List<ChangeLogEntry> changeLog,
       String sourcePath) {
+    public Adr {
+      changeLog = changeLog == null ? List.of() : changeLog;
+    }
+
     public Adr(
         String id,
         String title,
@@ -354,6 +366,7 @@ public final class Models {
           consequences,
           affectedRepositories,
           relatedSpecs,
+          List.of(),
           sourcePath);
     }
   }
@@ -467,6 +480,7 @@ public final class Models {
       List<AcceptanceCriterion> acceptanceCriteria,
       List<String> constraints,
       List<Constraint> structuredConstraints,
+      List<ChangeLogEntry> recentChanges,
       List<Adr> relatedAdrs,
       List<Guideline> applicableGuidelines) {}
 
@@ -480,6 +494,7 @@ public final class Models {
       List<AcceptanceCriterion> applicableAcceptanceCriteria,
       List<String> constraints,
       List<Constraint> structuredConstraints,
+      List<ChangeLogEntry> recentChanges,
       List<Adr> relatedAdrs,
       List<Guideline> applicableGuidelines) {}
 
@@ -497,6 +512,7 @@ public final class Models {
       List<AcceptanceCriterion> acceptanceCriteria,
       List<String> constraints,
       List<Constraint> structuredConstraints,
+      List<ChangeLogEntry> recentChanges,
       List<Adr> relatedAdrs,
       List<Guideline> applicableGuidelines) {}
 

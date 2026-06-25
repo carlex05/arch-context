@@ -532,6 +532,15 @@ public class YamlWorkspaceWriter {
         "Updated summary fields for spec " + specId + ".");
   }
 
+  public WriteResult appendSpecChange(String specId, ChangeLogEntry change, boolean dryRun) {
+    return updateSpec(
+        specId,
+        dryRun,
+        "Spec change log entry was not written.",
+        spec -> appendSpecChange(spec, change),
+        "Upserted change log entry " + change.id() + " for spec " + specId + ".");
+  }
+
   public WriteResult upsertAdrConsequence(
       String adrId, String consequence, boolean dryRun) {
     try {
@@ -559,6 +568,7 @@ public class YamlWorkspaceWriter {
               consequences,
               original.affectedRepositories(),
               original.relatedSpecs(),
+              original.changeLog(),
               original.sourcePath());
       WriteValidation validation = validator.validateAdr(root, updated);
       if (!validation.errors().isEmpty()) {
@@ -603,6 +613,7 @@ public class YamlWorkspaceWriter {
               original.consequences(),
               original.affectedRepositories(),
               original.relatedSpecs(),
+              original.changeLog(),
               original.sourcePath());
       WriteValidation validation = validator.validateAdr(root, updated);
       if (!validation.errors().isEmpty()) {
@@ -620,6 +631,52 @@ public class YamlWorkspaceWriter {
     } catch (IOException | IllegalArgumentException e) {
       WriteValidation validation = new WriteValidation(List.of(e.getMessage()), List.of());
       return result(false, dryRun, adrsDir(), "ADR status was not written.", validation, null);
+    }
+  }
+
+  public WriteResult appendAdrChange(String adrId, ChangeLogEntry change, boolean dryRun) {
+    try {
+      Path target = findAdrPath(adrId);
+      if (target == null) {
+        WriteValidation validation = new WriteValidation(List.of("Unknown adrId: " + adrId), List.of());
+        return result(false, dryRun, adrsDir(), "ADR change log entry was not written.", validation, null);
+      }
+      validator.validateKnownWriteTarget(root, target);
+      validateChangeLogEntry(change);
+      YamlDocuments doc = yaml.read(target);
+      Adr original = doc.adr;
+      List<ChangeLogEntry> changeLog = upsertChange(original.changeLog(), change);
+      Adr updated =
+          new Adr(
+              original.id(),
+              original.title(),
+              original.status(),
+              original.date(),
+              original.context(),
+              original.decision(),
+              original.supersededBy(),
+              original.statusNote(),
+              original.consequences(),
+              original.affectedRepositories(),
+              original.relatedSpecs(),
+              changeLog,
+              original.sourcePath());
+      WriteValidation validation = validator.validateAdr(root, updated);
+      if (!validation.errors().isEmpty()) {
+        return result(false, dryRun, target, "ADR change log entry was not written.", validation, updated);
+      }
+      boolean changed = !updated.equals(original);
+      doc.schemaVersion = "1.1";
+      doc.adr = updated;
+      if (changed && !dryRun) {
+        writeAtomically(target, doc);
+        reindex();
+      }
+      String summary = changed ? "Upserted change log entry " + change.id() + " for ADR " + adrId + "." : "No changes for ADR " + adrId + ".";
+      return result(changed, dryRun, target, summary, validation, updated);
+    } catch (IOException | IllegalArgumentException e) {
+      WriteValidation validation = new WriteValidation(List.of(e.getMessage()), List.of());
+      return result(false, dryRun, adrsDir(), "ADR change log entry was not written.", validation, null);
     }
   }
 
@@ -769,6 +826,7 @@ public class YamlWorkspaceWriter {
         nvl(spec.openQuestions()),
         nvl(spec.repositoryChanges()),
         spec.metadata(),
+        nvl(spec.changeLog()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -827,6 +885,7 @@ public class YamlWorkspaceWriter {
         nvl(spec.openQuestions()),
         nvl(spec.repositoryChanges()),
         spec.metadata(),
+        nvl(spec.changeLog()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -880,6 +939,7 @@ public class YamlWorkspaceWriter {
         nvl(spec.openQuestions()),
         nvl(spec.repositoryChanges()),
         spec.metadata(),
+        nvl(spec.changeLog()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -907,6 +967,7 @@ public class YamlWorkspaceWriter {
         nvl(spec.openQuestions()),
         nvl(spec.repositoryChanges()),
         spec.metadata(),
+        nvl(spec.changeLog()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -935,6 +996,7 @@ public class YamlWorkspaceWriter {
         nvl(spec.openQuestions()),
         nvl(spec.repositoryChanges()),
         spec.metadata(),
+        nvl(spec.changeLog()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -962,6 +1024,7 @@ public class YamlWorkspaceWriter {
         nvl(spec.openQuestions()),
         nvl(spec.repositoryChanges()),
         spec.metadata(),
+        nvl(spec.changeLog()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -1015,6 +1078,7 @@ public class YamlWorkspaceWriter {
         nvl(spec.openQuestions()),
         nvl(spec.repositoryChanges()),
         spec.metadata(),
+        nvl(spec.changeLog()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -1051,6 +1115,7 @@ public class YamlWorkspaceWriter {
         nvl(spec.openQuestions()),
         repositoryChanges,
         spec.metadata(),
+        nvl(spec.changeLog()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -1078,6 +1143,7 @@ public class YamlWorkspaceWriter {
         nvl(spec.openQuestions()),
         nvl(spec.repositoryChanges()),
         spec.metadata(),
+        nvl(spec.changeLog()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -1102,6 +1168,7 @@ public class YamlWorkspaceWriter {
         nvl(spec.openQuestions()),
         nvl(spec.repositoryChanges()),
         spec.metadata(),
+        nvl(spec.changeLog()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -1126,6 +1193,7 @@ public class YamlWorkspaceWriter {
         nvl(spec.openQuestions()),
         nvl(spec.repositoryChanges()),
         metadata,
+        nvl(spec.changeLog()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
   }
@@ -1151,8 +1219,58 @@ public class YamlWorkspaceWriter {
         nvl(spec.openQuestions()),
         nvl(spec.repositoryChanges()),
         spec.metadata(),
+        nvl(spec.changeLog()),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
+  }
+
+  private Spec appendSpecChange(Spec spec, ChangeLogEntry change) {
+    validateChangeLogEntry(change);
+    return spec(
+        spec.id(),
+        spec.title(),
+        spec.status(),
+        spec.owner(),
+        spec.problem(),
+        spec.businessGoal(),
+        nvl(spec.affectedRepositories()),
+        nvl(spec.affectedBoundedContexts()),
+        nvl(spec.functionalRequirements()),
+        nvl(spec.nonFunctionalRequirements()),
+        nvl(spec.acceptanceCriteria()),
+        nvl(spec.constraints()),
+        nvl(spec.structuredConstraints()),
+        nvl(spec.affectedComponents()),
+        nvl(spec.outOfScope()),
+        nvl(spec.openQuestions()),
+        nvl(spec.repositoryChanges()),
+        spec.metadata(),
+        upsertChange(spec.changeLog(), change),
+        nvl(spec.relatedAdrs()),
+        spec.sourcePath());
+  }
+
+  private List<ChangeLogEntry> upsertChange(List<ChangeLogEntry> existing, ChangeLogEntry change) {
+    List<ChangeLogEntry> changes = new ArrayList<>(nvl(existing));
+    changes.removeIf(c -> change.id().equals(c.id()));
+    changes.add(change);
+    return changes;
+  }
+
+  private void validateChangeLogEntry(ChangeLogEntry change) {
+    if (change == null) throw new IllegalArgumentException("change is required.");
+    if (change.id() == null || change.id().isBlank()) {
+      throw new IllegalArgumentException("change id is required.");
+    }
+    if (change.date() == null || change.date().isBlank()) {
+      throw new IllegalArgumentException("change date is required.");
+    }
+    if (change.summary() == null || change.summary().isBlank()) {
+      throw new IllegalArgumentException("change summary is required.");
+    }
+    if (change.reason() == null || change.reason().isBlank()) {
+      throw new IllegalArgumentException("change reason is required.");
+    }
   }
 
   private boolean sameAffectedComponent(ComponentRef left, ComponentRef right) {
@@ -1180,6 +1298,7 @@ public class YamlWorkspaceWriter {
       List<OpenQuestion> openQuestions,
       List<RepositoryChange> repositoryChanges,
       SpecMetadata metadata,
+      List<ChangeLogEntry> changeLog,
       List<String> relatedAdrs,
       String sourcePath) {
     return new Spec(
@@ -1201,6 +1320,7 @@ public class YamlWorkspaceWriter {
         openQuestions,
         repositoryChanges,
         metadata,
+        changeLog,
         relatedAdrs,
         sourcePath);
   }

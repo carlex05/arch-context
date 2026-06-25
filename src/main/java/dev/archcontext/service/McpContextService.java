@@ -133,6 +133,7 @@ public class McpContextService {
         implementableAcceptanceCriteria(s.acceptanceCriteria()),
         nvl(s.constraints()),
         implementableConstraints(s.structuredConstraints()),
+        recentChangeLog(s.changeLog()),
         adrs,
         gs);
   }
@@ -176,6 +177,7 @@ public class McpContextService {
         filterAcceptanceCriteria(spec.acceptanceCriteria(), acceptanceCriterionIds),
         nvl(spec.constraints()),
         implementableConstraints(spec.structuredConstraints()),
+        recentChangeLog(spec.changeLog()),
         adrs,
         applicableGuidelines(repository));
   }
@@ -208,6 +210,7 @@ public class McpContextService {
         repositoryContext.applicableAcceptanceCriteria(),
         repositoryContext.constraints(),
         repositoryContext.structuredConstraints(),
+        repositoryContext.recentChanges(),
         repositoryContext.relatedAdrs(),
         repositoryContext.applicableGuidelines());
   }
@@ -322,6 +325,12 @@ public class McpContextService {
 
   private List<Constraint> implementableConstraints(List<Constraint> constraints) {
     return nvl(constraints).stream().filter(Constraint::implementable).toList();
+  }
+
+  private List<ChangeLogEntry> recentChangeLog(List<ChangeLogEntry> changeLog) {
+    List<ChangeLogEntry> changes = nvl(changeLog);
+    int from = Math.max(0, changes.size() - 5);
+    return changes.subList(from, changes.size());
   }
 
   private SpecSummary summary(Spec spec) {

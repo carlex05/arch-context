@@ -252,17 +252,21 @@ Current write tools:
 - `update_spec_status`: change one existing spec status without rewriting the full spec.
 - `upsert_spec_metadata`: add or update planning metadata such as priority, effort, sprint, phase, and tags.
 - `upsert_spec_summary`: update existing spec summary fields such as title, owner, problem, or businessGoal.
+- `append_spec_change`: append or update one structured change-log entry in an existing spec.
 - `add_spec_out_of_scope_item`: add an out-of-scope item while avoiding duplicate descriptions.
 - `create_adr`: create one new ADR under `.archcontext/adrs/*.yaml`.
 - `upsert_adr`: create or update one ADR under `.archcontext/adrs/*.yaml`.
 - `upsert_adr_consequence`: add one consequence to an existing ADR.
 - `update_adr_status`: change one ADR status, optionally recording `supersededBy` and a status note.
+- `append_adr_change`: append or update one structured change-log entry in an existing ADR.
 - `validate_spec_repository_coverage`: validate repositoryChanges coverage for one spec.
 - `validate_workspace`: validate repository references, component references, active spec readiness, related ADRs, and schema versions without writing files.
 
 For Spec-Driven Development, acceptance criteria, constraints, repositoryChanges, contracts, and out-of-scope items are central. They make the implementation boundary explicit for both humans and agents: what must be true, what architectural rules must be respected, which repository owns which part, what contracts connect repositories, and what must not be implemented in the current change.
 
 Requirements, acceptance criteria, and structured constraints marked as `obsolete`, `superseded`, or `rejected` remain in the spec YAML for traceability, but implementation-oriented context tools return only implementable items. Use `get_spec_context` when an agent needs the full historical record.
+
+Specs and ADRs can also carry a structured `changeLog`. Implementation-oriented context tools include only the most recent entries by default so agents see why the context changed without receiving the full audit trail on every call.
 
 Write tools are intentionally constrained:
 
@@ -578,6 +582,22 @@ Spec enrichment examples:
 
 ```json
 {
+  "name": "append_spec_change",
+  "arguments": {
+    "specId": "SPEC-002",
+    "id": "CHG-20260625-001",
+    "date": "2026-06-25",
+    "summary": "Deprecated the old discriminator acceptance criterion.",
+    "reason": "ADR-006 removed discriminator-based parsing from the contract.",
+    "relatedAdr": "ADR-006",
+    "changedBy": "architecture-agent",
+    "dryRun": true
+  }
+}
+```
+
+```json
+{
   "name": "update_spec_status",
   "arguments": {
     "specId": "SPEC-002",
@@ -596,6 +616,22 @@ Spec enrichment examples:
     "status": "superseded",
     "supersededBy": "ADR-006",
     "note": "The original decision remains historical context but must not guide new implementations.",
+    "dryRun": true
+  }
+}
+```
+
+```json
+{
+  "name": "append_adr_change",
+  "arguments": {
+    "adrId": "ADR-002",
+    "id": "CHG-ADR-20260625-001",
+    "date": "2026-06-25",
+    "summary": "Recorded replacement by ADR-006.",
+    "reason": "The previous integration boundary is no longer valid for new implementations.",
+    "relatedAdr": "ADR-006",
+    "changedBy": "architecture-agent",
     "dryRun": true
   }
 }
@@ -646,13 +682,15 @@ Example agent workflow:
 11. Use `deprecate_spec_requirement` when a requirement must remain traceable but must not be implemented.
 12. Use `deprecate_spec_acceptance_criterion` when an acceptance criterion is no longer valid.
 13. Use `deprecate_spec_constraint` when a structured constraint is no longer applicable.
-14. Use `update_spec_status` when implementation reaches `review` or `done`.
-15. Use `upsert_adr_consequence` when implementation reveals a new consequence of an ADR.
-16. Use `update_adr_status` when an ADR becomes `deprecated` or `superseded`.
-17. Run `validate_spec_repository_coverage`.
-18. Run `validate_workspace`.
-19. Implementation agents call `get_agent_briefing_for_spec` for their `{ specId, repositoryId }`.
-20. Review the Git diff before committing shared `.archcontext` files.
+14. Use `append_spec_change` to record why the spec changed.
+15. Use `update_spec_status` when implementation reaches `review` or `done`.
+16. Use `upsert_adr_consequence` when implementation reveals a new consequence of an ADR.
+17. Use `update_adr_status` when an ADR becomes `deprecated` or `superseded`.
+18. Use `append_adr_change` to record why an ADR changed.
+19. Run `validate_spec_repository_coverage`.
+20. Run `validate_workspace`.
+21. Implementation agents call `get_agent_briefing_for_spec` for their `{ specId, repositoryId }`.
+22. Review the Git diff before committing shared `.archcontext` files.
 
 ## MCP surface
 
@@ -704,11 +742,13 @@ Tools:
 - `update_spec_status`
 - `upsert_spec_metadata`
 - `upsert_spec_summary`
+- `append_spec_change`
 - `add_spec_out_of_scope_item`
 - `create_adr`
 - `upsert_adr`
 - `upsert_adr_consequence`
 - `update_adr_status`
+- `append_adr_change`
 - `validate_spec_repository_coverage`
 - `validate_workspace`
 

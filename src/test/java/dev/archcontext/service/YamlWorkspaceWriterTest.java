@@ -597,6 +597,52 @@ class YamlWorkspaceWriterTest {
   }
 
   @Test
+  void appendSpecChangeAddsStructuredChangeLogEntry() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
+
+    WriteResult result =
+        writer.appendSpecChange(
+            "SPEC-001",
+            new ChangeLogEntry(
+                "CHG-001",
+                "2026-06-25",
+                "Superseded old workflow constraint.",
+                "Backend contract changed.",
+                "ADR-002",
+                "architecture-agent"),
+            false);
+
+    assertTrue(result.changed());
+    ChangeLogEntry change =
+        yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec.changeLog().getFirst();
+    assertEquals("CHG-001", change.id());
+    assertEquals("Backend contract changed.", change.reason());
+  }
+
+  @Test
+  void appendSpecChangeUpdatesExistingEntryById() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
+    writer.appendSpecChange(
+        "SPEC-001",
+        new ChangeLogEntry("CHG-001", "2026-06-25", "Old summary.", "Old reason.", null, null),
+        false);
+
+    WriteResult result =
+        writer.appendSpecChange(
+            "SPEC-001",
+            new ChangeLogEntry("CHG-001", "2026-06-25", "New summary.", "New reason.", null, null),
+            false);
+
+    assertTrue(result.changed());
+    List<ChangeLogEntry> changeLog =
+        yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec.changeLog();
+    assertEquals(1, changeLog.size());
+    assertEquals("New summary.", changeLog.getFirst().summary());
+  }
+
+  @Test
   void upsertSpecRepositoryChangeUpdatesByRepositoryId() throws Exception {
     writer.upsertRepository(repository("booking-api", "Booking API"), false);
     writer.createSpec(specWithImplementationScope("SPEC-001", List.of("booking-api")), false);
@@ -907,6 +953,30 @@ class YamlWorkspaceWriterTest {
     assertEquals("superseded", adr.status());
     assertEquals("ADR-002", adr.supersededBy());
     assertEquals("Replaced by the new contract boundary decision.", adr.statusNote());
+  }
+
+  @Test
+  void appendAdrChangeAddsStructuredChangeLogEntry() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createAdr(adr("ADR-001", List.of("booking-api"), List.of()), false);
+
+    WriteResult result =
+        writer.appendAdrChange(
+            "ADR-001",
+            new ChangeLogEntry(
+                "CHG-ADR-001",
+                "2026-06-25",
+                "Marked decision as superseded.",
+                "A newer decision replaced this integration boundary.",
+                "ADR-002",
+                "architecture-agent"),
+            false);
+
+    assertTrue(result.changed());
+    ChangeLogEntry change =
+        yaml.read(root.resolve(".archcontext/adrs/adr-001.yaml")).adr.changeLog().getFirst();
+    assertEquals("CHG-ADR-001", change.id());
+    assertEquals("ADR-002", change.relatedAdr());
   }
 
   @Test

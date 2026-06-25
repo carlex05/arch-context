@@ -374,6 +374,7 @@ public class ArchContextMcpServer {
                     Map.entry("openQuestions", arrayProperty("Open questions")),
                     Map.entry("repositoryChanges", arrayProperty("Repository-scoped changes")),
                     Map.entry("metadata", Map.of("type", "object", "description", "Spec planning metadata")),
+                    Map.entry("changeLog", arrayProperty("Structured spec change log")),
                     Map.entry("relatedAdrs", stringArrayProperty("Related ADR ids")),
                     Map.entry("dryRun", booleanProperty("Validate and preview without writing"))),
                 "id",
@@ -722,6 +723,35 @@ public class ArchContextMcpServer {
                     optionalString(args, "businessGoal"),
                     bool(args.get("dryRun")))),
         tool(
+            "append_spec_change",
+            "Append or update one structured change log entry in an existing spec.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "id",
+                    stringProperty("Change id"),
+                    "date",
+                    stringProperty("Change date"),
+                    "summary",
+                    stringProperty("Short change summary"),
+                    "reason",
+                    stringProperty("Reason for the change"),
+                    "relatedAdr",
+                    stringProperty("Optional related ADR id"),
+                    "changedBy",
+                    stringProperty("Optional author or agent identifier"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "specId",
+                "id",
+                "date",
+                "summary",
+                "reason"),
+            args ->
+                writer.appendSpecChange(
+                    requiredString(args, "specId"), changeLogEntry(args), bool(args.get("dryRun")))),
+        tool(
             "create_adr",
             "Create a new ADR YAML file under adrs/ using structured, validated input.",
             strictObjectSchema(
@@ -775,6 +805,35 @@ public class ArchContextMcpServer {
                     optionalString(args, "supersededBy"),
                     optionalString(args, "note"),
                     bool(args.get("dryRun")))),
+        tool(
+            "append_adr_change",
+            "Append or update one structured change log entry in an existing ADR.",
+            strictObjectSchema(
+                Map.of(
+                    "adrId",
+                    stringProperty("ADR id"),
+                    "id",
+                    stringProperty("Change id"),
+                    "date",
+                    stringProperty("Change date"),
+                    "summary",
+                    stringProperty("Short change summary"),
+                    "reason",
+                    stringProperty("Reason for the change"),
+                    "relatedAdr",
+                    stringProperty("Optional related ADR id"),
+                    "changedBy",
+                    stringProperty("Optional author or agent identifier"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "adrId",
+                "id",
+                "date",
+                "summary",
+                "reason"),
+            args ->
+                writer.appendAdrChange(
+                    requiredString(args, "adrId"), changeLogEntry(args), bool(args.get("dryRun")))),
         tool(
             "validate_workspace",
             "Validate repository references, component references, active spec readiness, related"
@@ -966,6 +1025,7 @@ public class ArchContextMcpServer {
         Map.entry("consequences", stringArrayProperty("ADR consequences")),
         Map.entry("affectedRepositories", stringArrayProperty("Affected repository ids")),
         Map.entry("relatedSpecs", stringArrayProperty("Related spec ids")),
+        Map.entry("changeLog", arrayProperty("Structured ADR change log")),
         Map.entry("dryRun", booleanProperty("Validate and preview without writing")));
   }
 
@@ -1107,8 +1167,19 @@ public class ArchContextMcpServer {
         list(args.get("openQuestions"), OpenQuestion.class),
         list(args.get("repositoryChanges"), RepositoryChange.class),
         object(args.get("metadata"), SpecMetadata.class),
+        list(args.get("changeLog"), ChangeLogEntry.class),
         stringList(args.get("relatedAdrs")),
         null);
+  }
+
+  private static ChangeLogEntry changeLogEntry(Map<String, Object> args) {
+    return new ChangeLogEntry(
+        requiredString(args, "id"),
+        requiredString(args, "date"),
+        requiredString(args, "summary"),
+        requiredString(args, "reason"),
+        optionalString(args, "relatedAdr"),
+        optionalString(args, "changedBy"));
   }
 
   private static RepositoryChange repositoryChange(Map<String, Object> args) {
@@ -1169,6 +1240,7 @@ public class ArchContextMcpServer {
         stringList(args.get("consequences")),
         stringList(args.get("affectedRepositories")),
         stringList(args.get("relatedSpecs")),
+        list(args.get("changeLog"), ChangeLogEntry.class),
         null);
   }
 

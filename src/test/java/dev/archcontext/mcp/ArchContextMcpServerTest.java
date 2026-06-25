@@ -85,10 +85,12 @@ class ArchContextMcpServerTest {
             "update_spec_status",
             "upsert_spec_metadata",
             "upsert_spec_summary",
+            "append_spec_change",
             "create_adr",
             "upsert_adr",
             "upsert_adr_consequence",
             "update_adr_status",
+            "append_adr_change",
             "validate_workspace",
             "validate_spec_repository_coverage"),
         tools.keySet());
@@ -203,6 +205,13 @@ class ArchContextMcpServerTest {
     assertProperty(tools.get("upsert_spec_metadata"), "effortHours");
     assertRequired(tools.get("upsert_spec_summary"), "specId");
     assertProperty(tools.get("upsert_spec_summary"), "title");
+    assertRequired(tools.get("append_spec_change"), "specId");
+    assertRequired(tools.get("append_spec_change"), "id");
+    assertRequired(tools.get("append_spec_change"), "date");
+    assertRequired(tools.get("append_spec_change"), "summary");
+    assertRequired(tools.get("append_spec_change"), "reason");
+    assertProperty(tools.get("append_spec_change"), "relatedAdr");
+    assertProperty(tools.get("append_spec_change"), "changedBy");
     assertRequired(tools.get("create_adr"), "id");
     assertRequired(tools.get("create_adr"), "title");
     assertRequired(tools.get("create_adr"), "status");
@@ -226,6 +235,13 @@ class ArchContextMcpServerTest {
     assertRequired(tools.get("update_adr_status"), "status");
     assertProperty(tools.get("update_adr_status"), "supersededBy");
     assertProperty(tools.get("update_adr_status"), "note");
+    assertRequired(tools.get("append_adr_change"), "adrId");
+    assertRequired(tools.get("append_adr_change"), "id");
+    assertRequired(tools.get("append_adr_change"), "date");
+    assertRequired(tools.get("append_adr_change"), "summary");
+    assertRequired(tools.get("append_adr_change"), "reason");
+    assertProperty(tools.get("append_adr_change"), "relatedAdr");
+    assertProperty(tools.get("append_adr_change"), "changedBy");
     assertProperty(tools.get("validate_workspace"), "strict");
     assertRequired(tools.get("validate_spec_repository_coverage"), "specId");
     assertProperty(tools.get("validate_spec_repository_coverage"), "strict");
