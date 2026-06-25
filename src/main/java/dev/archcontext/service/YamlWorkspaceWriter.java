@@ -426,6 +426,24 @@ public class YamlWorkspaceWriter {
         "Upserted acceptance criterion " + acceptanceCriterion.id() + ".");
   }
 
+  public WriteResult deprecateSpecAcceptanceCriterion(
+      String specId,
+      String acceptanceCriterionId,
+      String status,
+      String reason,
+      String supersededBy,
+      String relatedAdr,
+      boolean dryRun) {
+    return updateSpec(
+        specId,
+        dryRun,
+        "Acceptance criterion status was not written.",
+        spec ->
+            deprecateAcceptanceCriterion(
+                spec, acceptanceCriterionId, status, reason, supersededBy, relatedAdr),
+        "Updated acceptance criterion " + acceptanceCriterionId + " status to " + status + ".");
+  }
+
   public WriteResult addSpecOutOfScopeItem(String specId, OutOfScopeItem item, boolean dryRun) {
     return updateSpec(
         specId,
@@ -442,6 +460,22 @@ public class YamlWorkspaceWriter {
         "Constraint was not written.",
         spec -> updateStructuredConstraint(spec, constraint),
         "Upserted structured constraint " + constraint.id() + ".");
+  }
+
+  public WriteResult deprecateSpecConstraint(
+      String specId,
+      String constraintId,
+      String status,
+      String reason,
+      String supersededBy,
+      String relatedAdr,
+      boolean dryRun) {
+    return updateSpec(
+        specId,
+        dryRun,
+        "Constraint status was not written.",
+        spec -> deprecateConstraint(spec, constraintId, status, reason, supersededBy, relatedAdr),
+        "Updated constraint " + constraintId + " status to " + status + ".");
   }
 
   public WriteResult upsertSpecRepositoryChange(
@@ -747,12 +781,7 @@ public class YamlWorkspaceWriter {
       String reason,
       String supersededBy,
       String relatedAdr) {
-    if (!Set.of("obsolete", "superseded", "rejected").contains(status)) {
-      throw new IllegalArgumentException("status must be obsolete, superseded, or rejected.");
-    }
-    if (reason == null || reason.isBlank()) {
-      throw new IllegalArgumentException("reason is required when deprecating a requirement.");
-    }
+    validateDeprecation(status, reason);
     if (!"functional".equals(requirementType) && !"nonFunctional".equals(requirementType)) {
       throw new IllegalArgumentException("requirementType must be functional or nonFunctional.");
     }
@@ -791,6 +820,59 @@ public class YamlWorkspaceWriter {
         functional,
         nonFunctional,
         nvl(spec.acceptanceCriteria()),
+        nvl(spec.constraints()),
+        nvl(spec.structuredConstraints()),
+        nvl(spec.affectedComponents()),
+        nvl(spec.outOfScope()),
+        nvl(spec.openQuestions()),
+        nvl(spec.repositoryChanges()),
+        spec.metadata(),
+        nvl(spec.relatedAdrs()),
+        spec.sourcePath());
+  }
+
+  private Spec deprecateAcceptanceCriterion(
+      Spec spec,
+      String acceptanceCriterionId,
+      String status,
+      String reason,
+      String supersededBy,
+      String relatedAdr) {
+    validateDeprecation(status, reason);
+    List<AcceptanceCriterion> criteria = new ArrayList<>(nvl(spec.acceptanceCriteria()));
+    boolean updated = false;
+    for (int i = 0; i < criteria.size(); i++) {
+      AcceptanceCriterion criterion = criteria.get(i);
+      if (acceptanceCriterionId.equals(criterion.id())) {
+        criteria.set(
+            i,
+            new AcceptanceCriterion(
+                criterion.id(),
+                criterion.description(),
+                status,
+                reason,
+                supersededBy,
+                relatedAdr));
+        updated = true;
+        break;
+      }
+    }
+    if (!updated) {
+      throw new IllegalArgumentException(
+          "Unknown acceptanceCriterionId in spec " + spec.id() + ": " + acceptanceCriterionId);
+    }
+    return spec(
+        spec.id(),
+        spec.title(),
+        spec.status(),
+        spec.owner(),
+        spec.problem(),
+        spec.businessGoal(),
+        nvl(spec.affectedRepositories()),
+        nvl(spec.affectedBoundedContexts()),
+        nvl(spec.functionalRequirements()),
+        nvl(spec.nonFunctionalRequirements()),
+        criteria,
         nvl(spec.constraints()),
         nvl(spec.structuredConstraints()),
         nvl(spec.affectedComponents()),
@@ -882,6 +964,68 @@ public class YamlWorkspaceWriter {
         spec.metadata(),
         nvl(spec.relatedAdrs()),
         spec.sourcePath());
+  }
+
+  private Spec deprecateConstraint(
+      Spec spec,
+      String constraintId,
+      String status,
+      String reason,
+      String supersededBy,
+      String relatedAdr) {
+    validateDeprecation(status, reason);
+    List<Constraint> constraints = new ArrayList<>(nvl(spec.structuredConstraints()));
+    boolean updated = false;
+    for (int i = 0; i < constraints.size(); i++) {
+      Constraint constraint = constraints.get(i);
+      if (constraintId.equals(constraint.id())) {
+        constraints.set(
+            i,
+            new Constraint(
+                constraint.id(),
+                constraint.title(),
+                constraint.description(),
+                status,
+                reason,
+                supersededBy,
+                relatedAdr));
+        updated = true;
+        break;
+      }
+    }
+    if (!updated) {
+      throw new IllegalArgumentException("Unknown constraintId in spec " + spec.id() + ": " + constraintId);
+    }
+    return spec(
+        spec.id(),
+        spec.title(),
+        spec.status(),
+        spec.owner(),
+        spec.problem(),
+        spec.businessGoal(),
+        nvl(spec.affectedRepositories()),
+        nvl(spec.affectedBoundedContexts()),
+        nvl(spec.functionalRequirements()),
+        nvl(spec.nonFunctionalRequirements()),
+        nvl(spec.acceptanceCriteria()),
+        nvl(spec.constraints()),
+        constraints,
+        nvl(spec.affectedComponents()),
+        nvl(spec.outOfScope()),
+        nvl(spec.openQuestions()),
+        nvl(spec.repositoryChanges()),
+        spec.metadata(),
+        nvl(spec.relatedAdrs()),
+        spec.sourcePath());
+  }
+
+  private void validateDeprecation(String status, String reason) {
+    if (!Set.of("obsolete", "superseded", "rejected").contains(status)) {
+      throw new IllegalArgumentException("status must be obsolete, superseded, or rejected.");
+    }
+    if (reason == null || reason.isBlank()) {
+      throw new IllegalArgumentException("reason is required when deprecating an item.");
+    }
   }
 
   private Spec updateRepositoryChange(Spec spec, RepositoryChange repositoryChange) {

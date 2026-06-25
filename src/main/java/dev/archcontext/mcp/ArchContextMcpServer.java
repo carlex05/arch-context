@@ -479,6 +479,39 @@ public class ArchContextMcpServer {
                         requiredString(args, "id"), requiredString(args, "description")),
                     bool(args.get("dryRun")))),
         tool(
+            "deprecate_spec_acceptance_criterion",
+            "Mark one existing acceptance criterion as obsolete, superseded, or rejected without"
+                + " deleting it.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "acceptanceCriterionId",
+                    stringProperty("Acceptance criterion id"),
+                    "status",
+                    stringProperty("obsolete, superseded, or rejected"),
+                    "reason",
+                    stringProperty("Reason why the acceptance criterion is no longer implementable"),
+                    "supersededBy",
+                    stringProperty("Optional replacement acceptance criterion id"),
+                    "relatedAdr",
+                    stringProperty("Optional ADR id that records the decision"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "specId",
+                "acceptanceCriterionId",
+                "status",
+                "reason"),
+            args ->
+                writer.deprecateSpecAcceptanceCriterion(
+                    requiredString(args, "specId"),
+                    requiredString(args, "acceptanceCriterionId"),
+                    requiredString(args, "status"),
+                    requiredString(args, "reason"),
+                    optionalString(args, "supersededBy"),
+                    optionalString(args, "relatedAdr"),
+                    bool(args.get("dryRun")))),
+        tool(
             "add_spec_out_of_scope_item",
             "Add one out-of-scope item to an existing spec YAML, avoiding duplicate descriptions.",
             strictObjectSchema(
@@ -522,6 +555,39 @@ public class ArchContextMcpServer {
                         requiredString(args, "id"),
                         optionalString(args, "title"),
                         requiredString(args, "description")),
+                    bool(args.get("dryRun")))),
+        tool(
+            "deprecate_spec_constraint",
+            "Mark one existing structured constraint as obsolete, superseded, or rejected without"
+                + " deleting it.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "constraintId",
+                    stringProperty("Constraint id"),
+                    "status",
+                    stringProperty("obsolete, superseded, or rejected"),
+                    "reason",
+                    stringProperty("Reason why the constraint is no longer applicable"),
+                    "supersededBy",
+                    stringProperty("Optional replacement constraint id"),
+                    "relatedAdr",
+                    stringProperty("Optional ADR id that records the decision"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "specId",
+                "constraintId",
+                "status",
+                "reason"),
+            args ->
+                writer.deprecateSpecConstraint(
+                    requiredString(args, "specId"),
+                    requiredString(args, "constraintId"),
+                    requiredString(args, "status"),
+                    requiredString(args, "reason"),
+                    optionalString(args, "supersededBy"),
+                    optionalString(args, "relatedAdr"),
                     bool(args.get("dryRun")))),
         tool(
             "upsert_spec_repository_change",

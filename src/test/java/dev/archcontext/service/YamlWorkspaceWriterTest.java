@@ -374,6 +374,45 @@ class YamlWorkspaceWriterTest {
   }
 
   @Test
+  void deprecateSpecAcceptanceCriterionKeepsCriterionButMarksItNonImplementable()
+      throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(specWithImplementationScope("SPEC-001", List.of("booking-api")), false);
+
+    WriteResult result =
+        writer.deprecateSpecAcceptanceCriterion(
+            "SPEC-001",
+            "AC-001",
+            "superseded",
+            "UI flow now validates the replacement acceptance criterion.",
+            "AC-002",
+            "ADR-002",
+            false);
+
+    assertTrue(result.changed());
+    AcceptanceCriterion criterion =
+        yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec.acceptanceCriteria().getFirst();
+    assertEquals("AC-001", criterion.id());
+    assertEquals("superseded", criterion.status());
+    assertEquals("UI flow now validates the replacement acceptance criterion.", criterion.obsoleteReason());
+    assertEquals("AC-002", criterion.supersededBy());
+    assertFalse(criterion.implementable());
+  }
+
+  @Test
+  void deprecateSpecAcceptanceCriterionRejectsUnknownCriterion() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(specWithImplementationScope("SPEC-001", List.of("booking-api")), false);
+
+    WriteResult result =
+        writer.deprecateSpecAcceptanceCriterion(
+            "SPEC-001", "AC-404", "obsolete", "No longer needed.", null, null, false);
+
+    assertFalse(result.changed());
+    assertTrue(result.validation().errors().stream().anyMatch(e -> e.contains("AC-404")));
+  }
+
+  @Test
   void upsertSpecAcceptanceCriterionUpdatesById() throws Exception {
     writer.upsertRepository(repository("booking-api", "Booking API"), false);
     writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
@@ -430,6 +469,31 @@ class YamlWorkspaceWriterTest {
     Spec spec = yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec;
     assertEquals("CON-002", spec.structuredConstraints().getLast().id());
     assertTrue(spec.constraints().isEmpty());
+  }
+
+  @Test
+  void deprecateSpecConstraintKeepsConstraintButMarksItNonImplementable() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(specWithImplementationScope("SPEC-001", List.of("booking-api")), false);
+
+    WriteResult result =
+        writer.deprecateSpecConstraint(
+            "SPEC-001",
+            "CON-001",
+            "obsolete",
+            "Payment ownership is now covered by a broader platform guideline.",
+            null,
+            "ADR-002",
+            false);
+
+    assertTrue(result.changed());
+    Constraint constraint =
+        yaml.read(root.resolve(".archcontext/specs/spec-001.yaml")).spec.structuredConstraints().getFirst();
+    assertEquals("CON-001", constraint.id());
+    assertEquals("obsolete", constraint.status());
+    assertEquals("Payment ownership is now covered by a broader platform guideline.", constraint.obsoleteReason());
+    assertEquals("ADR-002", constraint.relatedAdr());
+    assertFalse(constraint.implementable());
   }
 
   @Test
@@ -652,6 +716,29 @@ class YamlWorkspaceWriterTest {
     assertFalse(
         result.errors().stream()
             .anyMatch(e -> e.contains("Requirement is not assigned") && e.contains("NFR-001")));
+  }
+
+  @Test
+  void validateWorkspaceIgnoresDeprecatedAcceptanceCriteriaForCoverage() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(specWithImplementationScope("SPEC-001", List.of("booking-api")), false);
+    writer.deprecateSpecAcceptanceCriterion(
+        "SPEC-001",
+        "AC-001",
+        "obsolete",
+        "Criterion moved to another story.",
+        null,
+        null,
+        false);
+    writer.upsertSpecRepositoryChange(
+        "SPEC-001", repositoryChange("booking-api", List.of("FR-001", "NFR-001"), List.of()), false);
+
+    WriteValidation result = writer.validateWorkspace(true);
+
+    assertFalse(
+        result.errors().stream()
+            .anyMatch(
+                e -> e.contains("Acceptance criterion is not assigned") && e.contains("AC-001")));
   }
 
   @Test

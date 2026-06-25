@@ -135,9 +135,40 @@ public final class Models {
     }
   }
 
-  public record AcceptanceCriterion(String id, String description) {}
+  public record AcceptanceCriterion(
+      String id,
+      String description,
+      String status,
+      String obsoleteReason,
+      String supersededBy,
+      String relatedAdr) {
+    public AcceptanceCriterion(String id, String description) {
+      this(id, description, null, null, null, null);
+    }
 
-  public record Constraint(String id, String title, String description) {}
+    public boolean implementable() {
+      String normalized = status == null || status.isBlank() ? "active" : status;
+      return "active".equalsIgnoreCase(normalized);
+    }
+  }
+
+  public record Constraint(
+      String id,
+      String title,
+      String description,
+      String status,
+      String obsoleteReason,
+      String supersededBy,
+      String relatedAdr) {
+    public Constraint(String id, String title, String description) {
+      this(id, title, description, null, null, null, null);
+    }
+
+    public boolean implementable() {
+      String normalized = status == null || status.isBlank() ? "active" : status;
+      return "active".equalsIgnoreCase(normalized);
+    }
+  }
 
   public record OutOfScopeItem(String description) {}
 

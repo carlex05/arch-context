@@ -233,7 +233,7 @@ public class WorkspaceValidator {
           repositoryChanges.stream()
               .flatMap(c -> nvl(c.acceptanceCriteria()).stream())
               .collect(Collectors.toCollection(LinkedHashSet::new));
-      for (String acceptanceCriterionId : acceptanceCriterionIds(spec)) {
+      for (String acceptanceCriterionId : implementableAcceptanceCriterionIds(spec)) {
         if (!assignedAcceptanceCriteria.contains(acceptanceCriterionId)) {
           add(
               strict,
@@ -389,6 +389,13 @@ public class WorkspaceValidator {
 
   private Set<String> acceptanceCriterionIds(Spec spec) {
     return nvl(spec.acceptanceCriteria()).stream()
+        .map(AcceptanceCriterion::id)
+        .collect(Collectors.toCollection(LinkedHashSet::new));
+  }
+
+  private Set<String> implementableAcceptanceCriterionIds(Spec spec) {
+    return nvl(spec.acceptanceCriteria()).stream()
+        .filter(AcceptanceCriterion::implementable)
         .map(AcceptanceCriterion::id)
         .collect(Collectors.toCollection(LinkedHashSet::new));
   }

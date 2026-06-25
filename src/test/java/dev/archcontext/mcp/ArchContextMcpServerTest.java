@@ -76,8 +76,10 @@ class ArchContextMcpServerTest {
             "upsert_spec_requirement",
             "deprecate_spec_requirement",
             "upsert_spec_acceptance_criterion",
+            "deprecate_spec_acceptance_criterion",
             "add_spec_out_of_scope_item",
             "upsert_spec_constraint",
+            "deprecate_spec_constraint",
             "upsert_spec_repository_change",
             "upsert_spec_affected_component",
             "update_spec_status",
@@ -160,6 +162,12 @@ class ArchContextMcpServerTest {
     assertRequired(tools.get("upsert_spec_acceptance_criterion"), "id");
     assertRequired(tools.get("upsert_spec_acceptance_criterion"), "description");
     assertProperty(tools.get("upsert_spec_acceptance_criterion"), "dryRun");
+    assertRequired(tools.get("deprecate_spec_acceptance_criterion"), "specId");
+    assertRequired(tools.get("deprecate_spec_acceptance_criterion"), "acceptanceCriterionId");
+    assertRequired(tools.get("deprecate_spec_acceptance_criterion"), "status");
+    assertRequired(tools.get("deprecate_spec_acceptance_criterion"), "reason");
+    assertProperty(tools.get("deprecate_spec_acceptance_criterion"), "supersededBy");
+    assertProperty(tools.get("deprecate_spec_acceptance_criterion"), "relatedAdr");
     assertRequired(tools.get("add_spec_out_of_scope_item"), "specId");
     assertRequired(tools.get("add_spec_out_of_scope_item"), "description");
     assertProperty(tools.get("add_spec_out_of_scope_item"), "dryRun");
@@ -168,6 +176,12 @@ class ArchContextMcpServerTest {
     assertRequired(tools.get("upsert_spec_constraint"), "description");
     assertProperty(tools.get("upsert_spec_constraint"), "title");
     assertProperty(tools.get("upsert_spec_constraint"), "dryRun");
+    assertRequired(tools.get("deprecate_spec_constraint"), "specId");
+    assertRequired(tools.get("deprecate_spec_constraint"), "constraintId");
+    assertRequired(tools.get("deprecate_spec_constraint"), "status");
+    assertRequired(tools.get("deprecate_spec_constraint"), "reason");
+    assertProperty(tools.get("deprecate_spec_constraint"), "supersededBy");
+    assertProperty(tools.get("deprecate_spec_constraint"), "relatedAdr");
     assertRequired(tools.get("upsert_spec_repository_change"), "specId");
     assertRequired(tools.get("upsert_spec_repository_change"), "repositoryId");
     assertRequired(tools.get("upsert_spec_repository_change"), "summary");

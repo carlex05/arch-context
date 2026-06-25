@@ -74,6 +74,53 @@ class ArchContextCoreTest {
   }
 
   @Test
+  void implementationContextsFilterNonImplementableCriteriaAndConstraints() throws Exception {
+    writeWorkspace(dir);
+    Path specPath = dir.resolve(".archcontext/specs/SPEC-001.yaml");
+    String spec = Files.readString(specPath);
+    spec =
+        spec.replace(
+            "    - id: AC-001\n"
+                + "      description: Remaining items stay active.\n",
+            "    - id: AC-001\n"
+                + "      description: Remaining items stay active.\n"
+                + "      status: superseded\n"
+                + "      obsoleteReason: Covered by AC-002.\n"
+                + "      supersededBy: AC-002\n"
+                + "    - id: AC-002\n"
+                + "      description: Remaining items stay active after the replacement flow.\n");
+    spec =
+        spec.replace(
+            "    - id: CON-001\n"
+                + "      title: Payment ownership\n"
+                + "      description: Booking API must not directly access payment database tables.\n",
+            "    - id: CON-001\n"
+                + "      title: Payment ownership\n"
+                + "      description: Booking API must not directly access payment database tables.\n"
+                + "      status: obsolete\n"
+                + "      obsoleteReason: Covered by platform guideline.\n"
+                + "    - id: CON-002\n"
+                + "      title: Payment ownership replacement\n"
+                + "      description: Follow the platform payment ownership guideline.\n");
+    spec = spec.replace("      acceptanceCriteria: [AC-001]\n", "      acceptanceCriteria: [AC-001, AC-002]\n");
+    Files.writeString(specPath, spec);
+
+    McpContextService m = new McpContextService(dir);
+    ImplementationContext implementationContext =
+        m.getImplementationContextForSpec("SPEC-001", "booking-api");
+    RepositoryImplementationContext repositoryContext =
+        m.getRepositoryImplementationContextForSpec("SPEC-001", "booking-api");
+    AgentBriefing briefing = m.getAgentBriefingForSpec("SPEC-001", "booking-api");
+
+    assertEquals(List.of("AC-002"), implementationContext.acceptanceCriteria().stream().map(AcceptanceCriterion::id).toList());
+    assertEquals(List.of("CON-002"), implementationContext.structuredConstraints().stream().map(Constraint::id).toList());
+    assertEquals(List.of("AC-002"), repositoryContext.applicableAcceptanceCriteria().stream().map(AcceptanceCriterion::id).toList());
+    assertEquals(List.of("CON-002"), repositoryContext.structuredConstraints().stream().map(Constraint::id).toList());
+    assertEquals(List.of("AC-002"), briefing.acceptanceCriteria().stream().map(AcceptanceCriterion::id).toList());
+    assertEquals(List.of("CON-002"), briefing.structuredConstraints().stream().map(Constraint::id).toList());
+  }
+
+  @Test
   void workspaceValidationRequiresImportedDatabase() throws Exception {
     new WorkspaceService().init(dir);
 

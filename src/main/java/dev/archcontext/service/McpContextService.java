@@ -130,9 +130,9 @@ public class McpContextService {
         rc,
         implementableRequirements(s.functionalRequirements()),
         implementableRequirements(s.nonFunctionalRequirements()),
-        nvl(s.acceptanceCriteria()),
+        implementableAcceptanceCriteria(s.acceptanceCriteria()),
         nvl(s.constraints()),
-        nvl(s.structuredConstraints()),
+        implementableConstraints(s.structuredConstraints()),
         adrs,
         gs);
   }
@@ -175,7 +175,7 @@ public class McpContextService {
         filterRequirements(spec.nonFunctionalRequirements(), requirementIds),
         filterAcceptanceCriteria(spec.acceptanceCriteria(), acceptanceCriterionIds),
         nvl(spec.constraints()),
-        nvl(spec.structuredConstraints()),
+        implementableConstraints(spec.structuredConstraints()),
         adrs,
         applicableGuidelines(repository));
   }
@@ -309,8 +309,19 @@ public class McpContextService {
 
   private List<AcceptanceCriterion> filterAcceptanceCriteria(
       List<AcceptanceCriterion> acceptanceCriteria, Set<String> applicableIds) {
-    if (applicableIds == null) return nvl(acceptanceCriteria);
-    return nvl(acceptanceCriteria).stream().filter(c -> applicableIds.contains(c.id())).toList();
+    Stream<AcceptanceCriterion> stream =
+        nvl(acceptanceCriteria).stream().filter(AcceptanceCriterion::implementable);
+    if (applicableIds == null) return stream.toList();
+    return stream.filter(c -> applicableIds.contains(c.id())).toList();
+  }
+
+  private List<AcceptanceCriterion> implementableAcceptanceCriteria(
+      List<AcceptanceCriterion> acceptanceCriteria) {
+    return nvl(acceptanceCriteria).stream().filter(AcceptanceCriterion::implementable).toList();
+  }
+
+  private List<Constraint> implementableConstraints(List<Constraint> constraints) {
+    return nvl(constraints).stream().filter(Constraint::implementable).toList();
   }
 
   private SpecSummary summary(Spec spec) {
