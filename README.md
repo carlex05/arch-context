@@ -102,6 +102,100 @@ java -jar target/archcontext.jar --help
 java -jar target/archcontext.jar --version
 ```
 
+## Easier local installation
+
+The recommended distribution path for `0.2.0` is a GitHub Release JAR plus the
+local installer script. The installer copies the JAR to
+`~/.local/share/archcontext/archcontext.jar` and creates an `archcontext`
+wrapper in `~/.local/bin`.
+
+Install from a local build:
+
+```bash
+mvn -q package -Dgit.commit=$(git rev-parse --short HEAD)
+scripts/install.sh --jar target/archcontext.jar
+archcontext --version
+```
+
+Install from a release URL:
+
+```bash
+scripts/install.sh --url https://github.com/<owner>/<repo>/releases/download/v0.2.0/archcontext-0.2.0.jar
+archcontext --version
+```
+
+After installation, MCP clients can use the wrapper instead of an absolute JAR
+path:
+
+```json
+{
+  "mcpServers": {
+    "archcontext": {
+      "command": "archcontext",
+      "args": [
+        "mcp",
+        "--root",
+        "/absolute/path/to/workspace"
+      ]
+    }
+  }
+}
+```
+
+For opencode:
+
+```json
+{
+  "mcp": {
+    "arch-context-front9": {
+      "type": "local",
+      "command": [
+        "archcontext",
+        "mcp",
+        "--root",
+        "/absolute/path/to/workspace"
+      ],
+      "timeout": 30000,
+      "enabled": true
+    }
+  },
+  "experimental": {
+    "mcp_timeout": 30000
+  }
+}
+```
+
+## Release publishing checklist
+
+1. Build and test:
+
+   ```bash
+   mvn -q test
+   mvn -q package -DskipTests -Dgit.commit=$(git rev-parse --short HEAD)
+   java -jar target/archcontext.jar --version
+   ```
+
+2. Create the release artifact:
+
+   ```bash
+   cp target/archcontext.jar target/archcontext-0.2.0.jar
+   sha256sum target/archcontext-0.2.0.jar > target/archcontext-0.2.0.jar.sha256
+   ```
+
+3. Push the release commit and tag:
+
+   ```bash
+   git push origin main
+   git push origin v0.2.0
+   ```
+
+4. Create a GitHub Release for `v0.2.0` and upload:
+
+   - `target/archcontext-0.2.0.jar`
+   - `target/archcontext-0.2.0.jar.sha256`
+
+5. Smoke test the downloaded artifact with `scripts/install.sh --url <release-jar-url>`.
+
 ## CLI usage
 
 ```bash

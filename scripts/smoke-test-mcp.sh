@@ -14,7 +14,8 @@ cleanup() {
 trap cleanup EXIT
 
 echo "Building ArchContext..."
-mvn -q -f "$ROOT_DIR/pom.xml" clean package
+GIT_COMMIT="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || printf 'unknown')"
+mvn -q -f "$ROOT_DIR/pom.xml" clean package -Dgit.commit="$GIT_COMMIT"
 
 echo "Preparing sample workspace at $WORKSPACE..."
 cp -R "$ROOT_DIR/examples/sample-workspace/.archcontext" "$WORKSPACE/.archcontext"
