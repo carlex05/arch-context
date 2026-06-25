@@ -892,6 +892,57 @@ public class YamlWorkspaceWriter {
     }
   }
 
+  public WriteValidation validateSpecConsistency(String specId, boolean strict) {
+    return validator.validateSpecConsistency(root, specId, strict);
+  }
+
+  public Map<String, Object> suggestNextRequirementId(String specId, String requirementType) {
+    try {
+      SpecFile specFile = findSpec(specId);
+      if (specFile == null) return Map.of("errors", List.of("Unknown specId: " + specId));
+      String prefix =
+          "nonFunctional".equals(requirementType) ? "NFR" : "functional".equals(requirementType) ? "FR" : null;
+      if (prefix == null) {
+        return Map.of("errors", List.of("requirementType must be functional or nonFunctional."));
+      }
+      List<String> ids =
+          "functional".equals(requirementType)
+              ? nvl(specFile.document().spec.functionalRequirements()).stream().map(Requirement::id).toList()
+              : nvl(specFile.document().spec.nonFunctionalRequirements()).stream().map(Requirement::id).toList();
+      return nextId(prefix, ids);
+    } catch (IOException e) {
+      return Map.of("errors", List.of(e.getMessage()));
+    }
+  }
+
+  public Map<String, Object> suggestNextAcceptanceCriterionId(String specId) {
+    try {
+      SpecFile specFile = findSpec(specId);
+      if (specFile == null) return Map.of("errors", List.of("Unknown specId: " + specId));
+      return nextId(
+          "AC",
+          nvl(specFile.document().spec.acceptanceCriteria()).stream()
+              .map(AcceptanceCriterion::id)
+              .toList());
+    } catch (IOException e) {
+      return Map.of("errors", List.of(e.getMessage()));
+    }
+  }
+
+  public Map<String, Object> suggestNextConstraintId(String specId) {
+    try {
+      SpecFile specFile = findSpec(specId);
+      if (specFile == null) return Map.of("errors", List.of("Unknown specId: " + specId));
+      return nextId(
+          "CON",
+          nvl(specFile.document().spec.structuredConstraints()).stream()
+              .map(Constraint::id)
+              .toList());
+    } catch (IOException e) {
+      return Map.of("errors", List.of(e.getMessage()));
+    }
+  }
+
   public void validateKnownWriteTarget(Path target) {
     validator.validateKnownWriteTarget(root, target);
   }
@@ -1704,6 +1755,18 @@ public class YamlWorkspaceWriter {
       values.add(value);
     }
     return values;
+  }
+
+  private Map<String, Object> nextId(String prefix, List<String> existingIds) {
+    int max =
+        nvl(existingIds).stream()
+            .filter(id -> id != null && id.matches(prefix + "-\\d+"))
+            .map(id -> id.substring((prefix + "-").length()))
+            .mapToInt(Integer::parseInt)
+            .max()
+            .orElse(0);
+    String next = prefix + "-" + String.format("%02d", max + 1);
+    return Map.of("prefix", prefix, "nextId", next, "existingIds", nvl(existingIds));
   }
 
   private void validateChangeLogEntry(ChangeLogEntry change) {

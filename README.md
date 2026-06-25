@@ -263,6 +263,8 @@ Current write tools:
 - `update_adr_status`: change one ADR status, optionally recording `supersededBy` and a status note.
 - `append_adr_change`: append or update one structured change-log entry in an existing ADR.
 - `supersede_adr`: mark one existing ADR as superseded by another existing ADR and link both.
+- `validate_spec_consistency`: validate deterministic consistency rules for superseding, relations, and repositoryChanges.
+- `suggest_next_requirement_id`, `suggest_next_acceptance_criterion_id`, `suggest_next_constraint_id`: suggest the next conventional id in a spec.
 - `validate_spec_repository_coverage`: validate repositoryChanges coverage for one spec.
 - `validate_workspace`: validate repository references, component references, active spec readiness, related ADRs, and schema versions without writing files.
 
@@ -273,6 +275,8 @@ Requirements, acceptance criteria, and structured constraints marked as `obsolet
 Specs and ADRs can also carry a structured `changeLog`. Implementation-oriented context tools include only the most recent entries by default so agents see why the context changed without receiving the full audit trail on every call.
 
 Superseding tools link resources that already exist. Create the replacement spec or ADR first, then call `supersede_spec` or `supersede_adr` to update both sides and append traceability entries.
+
+Implementation context tools keep payloads compact by default. Use `includeSuperseded: true` to include obsolete/superseded/rejected items, `includeChangeLog: "none" | "summary" | "full"` to control changelog depth, and `maxHistoricalItems` to adjust summary length.
 
 Write tools are intentionally constrained:
 
@@ -707,10 +711,43 @@ Spec enrichment examples:
 
 ```json
 {
+  "name": "get_agent_briefing_for_spec",
+  "arguments": {
+    "specId": "SPEC-002-v2",
+    "repositoryId": "booking-api",
+    "includeSuperseded": true,
+    "includeChangeLog": "full",
+    "maxHistoricalItems": 10
+  }
+}
+```
+
+```json
+{
   "name": "validate_spec_repository_coverage",
   "arguments": {
     "specId": "SPEC-002",
     "strict": true
+  }
+}
+```
+
+```json
+{
+  "name": "validate_spec_consistency",
+  "arguments": {
+    "specId": "SPEC-002-v2",
+    "strict": true
+  }
+}
+```
+
+```json
+{
+  "name": "suggest_next_requirement_id",
+  "arguments": {
+    "specId": "SPEC-002-v2",
+    "requirementType": "functional"
   }
 }
 ```
@@ -747,9 +784,10 @@ Example agent workflow:
 19. Use `update_adr_status` or `supersede_adr` when an ADR becomes `deprecated` or `superseded`.
 20. Use `append_adr_change` to record why an ADR changed.
 21. Run `validate_spec_repository_coverage`.
-22. Run `validate_workspace`.
-23. Implementation agents call `get_agent_briefing_for_spec` for their `{ specId, repositoryId }`.
-24. Review the Git diff before committing shared `.archcontext` files.
+22. Run `validate_spec_consistency`.
+23. Run `validate_workspace`.
+24. Implementation agents call `get_agent_briefing_for_spec` for their `{ specId, repositoryId }`.
+25. Review the Git diff before committing shared `.archcontext` files.
 
 ## MCP surface
 
@@ -780,6 +818,10 @@ Tools:
 - `resolve_repository_by_path`
 - `get_agent_briefing_for_spec`
 - `validate_spec_completeness`
+- `validate_spec_consistency`
+- `suggest_next_requirement_id`
+- `suggest_next_acceptance_criterion_id`
+- `suggest_next_constraint_id`
 - `list_active_specs`
 - `upsert_solution`
 - `upsert_solution_principle`

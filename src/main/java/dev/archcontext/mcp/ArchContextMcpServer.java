@@ -177,11 +177,21 @@ public class ArchContextMcpServer {
                     "specId",
                     stringProperty("Spec id"),
                     "repositoryId",
-                    stringProperty("Optional repository id")),
+                    stringProperty("Optional repository id"),
+                    "includeSuperseded",
+                    booleanProperty("Include obsolete/superseded/rejected items"),
+                    "includeChangeLog",
+                    stringProperty("none, summary, or full"),
+                    "maxHistoricalItems",
+                    integerProperty("Maximum summary changelog entries")),
                 "specId"),
             args ->
                 svc.getImplementationContextForSpec(
-                    requiredString(args, "specId"), optionalString(args, "repositoryId"))),
+                    requiredString(args, "specId"),
+                    optionalString(args, "repositoryId"),
+                    bool(args.get("includeSuperseded")),
+                    optionalString(args, "includeChangeLog"),
+                    optionalIntOrDefault(args, "maxHistoricalItems", 5))),
         tool(
             "get_repository_implementation_context_for_spec",
             "Return repository-scoped implementation context for one spec and repository,"
@@ -192,12 +202,22 @@ public class ArchContextMcpServer {
                     "specId",
                     stringProperty("Spec id"),
                     "repositoryId",
-                    stringProperty("Repository id")),
+                    stringProperty("Repository id"),
+                    "includeSuperseded",
+                    booleanProperty("Include obsolete/superseded/rejected items"),
+                    "includeChangeLog",
+                    stringProperty("none, summary, or full"),
+                    "maxHistoricalItems",
+                    integerProperty("Maximum summary changelog entries")),
                 "specId",
                 "repositoryId"),
             args ->
                 svc.getRepositoryImplementationContextForSpec(
-                    requiredString(args, "specId"), requiredString(args, "repositoryId"))),
+                    requiredString(args, "specId"),
+                    requiredString(args, "repositoryId"),
+                    bool(args.get("includeSuperseded")),
+                    optionalString(args, "includeChangeLog"),
+                    optionalIntOrDefault(args, "maxHistoricalItems", 5))),
         tool(
             "resolve_repository_by_path",
             "Resolve a local filesystem path to the ArchContext repository definition whose"
@@ -212,17 +232,63 @@ public class ArchContextMcpServer {
                     "specId",
                     stringProperty("Spec id"),
                     "repositoryId",
-                    stringProperty("Repository id")),
+                    stringProperty("Repository id"),
+                    "includeSuperseded",
+                    booleanProperty("Include obsolete/superseded/rejected items"),
+                    "includeChangeLog",
+                    stringProperty("none, summary, or full"),
+                    "maxHistoricalItems",
+                    integerProperty("Maximum summary changelog entries")),
                 "specId",
                 "repositoryId"),
             args ->
                 svc.getAgentBriefingForSpec(
-                    requiredString(args, "specId"), requiredString(args, "repositoryId"))),
+                    requiredString(args, "specId"),
+                    requiredString(args, "repositoryId"),
+                    bool(args.get("includeSuperseded")),
+                    optionalString(args, "includeChangeLog"),
+                    optionalIntOrDefault(args, "maxHistoricalItems", 5))),
         tool(
             "validate_spec_completeness",
             "Check whether a spec has the minimum sections needed for implementation planning.",
             strictObjectSchema(Map.of("specId", stringProperty("Spec id")), "specId"),
             args -> svc.validateSpecCompleteness(requiredString(args, "specId"))),
+        tool(
+            "validate_spec_consistency",
+            "Validate deterministic consistency rules for one spec, including superseding and"
+                + " non-implementable assignments.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "strict",
+                    booleanProperty("Treat warnings as errors")),
+                "specId"),
+            args -> writer.validateSpecConsistency(requiredString(args, "specId"), bool(args.get("strict")))),
+        tool(
+            "suggest_next_requirement_id",
+            "Suggest the next requirement id for one spec and requirement type.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Spec id"),
+                    "requirementType",
+                    stringProperty("functional or nonFunctional")),
+                "specId",
+                "requirementType"),
+            args ->
+                writer.suggestNextRequirementId(
+                    requiredString(args, "specId"), requiredString(args, "requirementType"))),
+        tool(
+            "suggest_next_acceptance_criterion_id",
+            "Suggest the next acceptance criterion id for one spec.",
+            strictObjectSchema(Map.of("specId", stringProperty("Spec id")), "specId"),
+            args -> writer.suggestNextAcceptanceCriterionId(requiredString(args, "specId"))),
+        tool(
+            "suggest_next_constraint_id",
+            "Suggest the next structured constraint id for one spec.",
+            strictObjectSchema(Map.of("specId", stringProperty("Spec id")), "specId"),
+            args -> writer.suggestNextConstraintId(requiredString(args, "specId"))),
         tool(
             "list_active_specs",
             "Return specs with active implementation statuses such as draft, active, in-progress,"
@@ -1227,6 +1293,11 @@ public class ArchContextMcpServer {
     if (value instanceof Number n) return n.intValue();
     if (value == null || value.toString().isBlank()) return null;
     return Integer.valueOf(value.toString());
+  }
+
+  private static int optionalIntOrDefault(Map<String, Object> args, String name, int defaultValue) {
+    Integer value = optionalInt(args, name);
+    return value == null ? defaultValue : value;
   }
 
   private static Double optionalDouble(Map<String, Object> args, String name) {

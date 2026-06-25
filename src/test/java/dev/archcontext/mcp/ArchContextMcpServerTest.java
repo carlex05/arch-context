@@ -63,6 +63,10 @@ class ArchContextMcpServerTest {
             "resolve_repository_by_path",
             "get_agent_briefing_for_spec",
             "validate_spec_completeness",
+            "validate_spec_consistency",
+            "suggest_next_requirement_id",
+            "suggest_next_acceptance_criterion_id",
+            "suggest_next_constraint_id",
             "list_active_specs",
             "upsert_solution",
             "upsert_solution_principle",
@@ -116,11 +120,23 @@ class ArchContextMcpServerTest {
     assertProperty(tools.get("search_context"), "types");
     assertRequired(tools.get("get_implementation_context_for_spec"), "specId");
     assertProperty(tools.get("get_implementation_context_for_spec"), "repositoryId");
+    assertProperty(tools.get("get_implementation_context_for_spec"), "includeSuperseded");
+    assertProperty(tools.get("get_implementation_context_for_spec"), "includeChangeLog");
     assertRequired(tools.get("get_repository_implementation_context_for_spec"), "specId");
     assertRequired(tools.get("get_repository_implementation_context_for_spec"), "repositoryId");
+    assertProperty(tools.get("get_repository_implementation_context_for_spec"), "includeSuperseded");
+    assertProperty(tools.get("get_repository_implementation_context_for_spec"), "includeChangeLog");
     assertRequired(tools.get("resolve_repository_by_path"), "path");
     assertRequired(tools.get("get_agent_briefing_for_spec"), "specId");
     assertRequired(tools.get("get_agent_briefing_for_spec"), "repositoryId");
+    assertProperty(tools.get("get_agent_briefing_for_spec"), "includeSuperseded");
+    assertProperty(tools.get("get_agent_briefing_for_spec"), "includeChangeLog");
+    assertRequired(tools.get("validate_spec_consistency"), "specId");
+    assertProperty(tools.get("validate_spec_consistency"), "strict");
+    assertRequired(tools.get("suggest_next_requirement_id"), "specId");
+    assertRequired(tools.get("suggest_next_requirement_id"), "requirementType");
+    assertRequired(tools.get("suggest_next_acceptance_criterion_id"), "specId");
+    assertRequired(tools.get("suggest_next_constraint_id"), "specId");
     assertRequired(tools.get("upsert_solution"), "id");
     assertRequired(tools.get("upsert_solution"), "name");
     assertProperty(tools.get("upsert_solution"), "principles");

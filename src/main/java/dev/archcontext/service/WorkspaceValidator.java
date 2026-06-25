@@ -250,6 +250,27 @@ public class WorkspaceValidator {
     return new WriteValidation(distinct(errors), distinct(warnings));
   }
 
+  public WriteValidation validateSpecConsistency(Path root, String specId, boolean strict) {
+    List<String> errors = new ArrayList<>();
+    List<String> warnings = new ArrayList<>();
+    try {
+      Map<String, Spec> specs =
+          specs(root).stream().collect(Collectors.toMap(Spec::id, s -> s, (a, b) -> a));
+      Map<String, Adr> adrs =
+          adrs(root).stream().collect(Collectors.toMap(Adr::id, a -> a, (a, b) -> a));
+      Spec spec = specs.get(specId);
+      if (spec == null) return new WriteValidation(List.of("Unknown specId: " + specId), List.of());
+
+      validateSpecSuperseding(spec, specs, strict, errors, warnings);
+      validateSpecRelations(spec, specs, adrs, strict, errors, warnings);
+      validateRepositoryChangeConsistency(spec, strict, errors, warnings);
+      validateAdrConsistency(spec, adrs, strict, errors, warnings);
+    } catch (IOException e) {
+      errors.add("Cannot validate spec consistency: " + e.getMessage());
+    }
+    return new WriteValidation(distinct(errors), distinct(warnings));
+  }
+
   public void validateKnownWriteTarget(Path root, Path target) {
     Path archContextDir = root.resolve(".archcontext").toAbsolutePath().normalize();
     Path normalizedTarget = target.toAbsolutePath().normalize();
@@ -400,6 +421,104 @@ public class WorkspaceValidator {
         .collect(Collectors.toCollection(LinkedHashSet::new));
   }
 
+  private void validateSpecSuperseding(
+      Spec spec,
+      Map<String, Spec> specs,
+      boolean strict,
+      List<String> errors,
+      List<String> warnings) {
+    if (!blank(spec.supersededBy()) && !specs.containsKey(spec.supersededBy())) {
+      errors.add("Spec " + spec.id() + " supersededBy points to unknown spec: " + spec.supersededBy());
+    }
+    for (String supersedes : nvl(spec.supersedes())) {
+      if (!specs.containsKey(supersedes)) {
+        errors.add("Spec " + spec.id() + " supersedes unknown spec: " + supersedes);
+      }
+    }
+    if (!blank(spec.supersededBy()) && !"superseded".equalsIgnoreCase(spec.status())) {
+      add(strict, errors, warnings, "Spec " + spec.id() + " has supersededBy but status is not superseded.");
+    }
+  }
+
+  private void validateSpecRelations(
+      Spec spec,
+      Map<String, Spec> specs,
+      Map<String, Adr> adrs,
+      boolean strict,
+      List<String> errors,
+      List<String> warnings) {
+    for (SpecRelation relation : nvl(spec.relatedSpecs())) {
+      if (blank(relation.specId())) {
+        errors.add("Spec relation in " + spec.id() + " has no specId.");
+        continue;
+      }
+      Spec related = specs.get(relation.specId());
+      if (related == null) {
+        errors.add("Spec " + spec.id() + " relates to unknown spec: " + relation.specId());
+      } else if (relation.active() && "superseded".equalsIgnoreCase(related.status())) {
+        add(strict, errors, warnings, "Spec " + spec.id() + " has active relation to superseded spec: " + relation.specId());
+      }
+    }
+    for (AdrRelation relation : nvl(spec.relatedAdrLinks())) {
+      if (blank(relation.adrId())) {
+        errors.add("ADR relation in spec " + spec.id() + " has no adrId.");
+        continue;
+      }
+      Adr related = adrs.get(relation.adrId());
+      if (related == null) {
+        errors.add("Spec " + spec.id() + " relates to unknown ADR: " + relation.adrId());
+      } else if (relation.active() && "superseded".equalsIgnoreCase(related.status())) {
+        add(strict, errors, warnings, "Spec " + spec.id() + " has active relation to superseded ADR: " + relation.adrId());
+      }
+    }
+  }
+
+  private void validateRepositoryChangeConsistency(
+      Spec spec, boolean strict, List<String> errors, List<String> warnings) {
+    Set<String> nonImplementableRequirements = nonImplementableRequirementIds(spec);
+    Set<String> nonImplementableAcceptanceCriteria = nonImplementableAcceptanceCriterionIds(spec);
+    for (RepositoryChange change : nvl(spec.repositoryChanges())) {
+      for (String requirementId : nvl(change.requirements())) {
+        if (nonImplementableRequirements.contains(requirementId)) {
+          add(strict, errors, warnings, "RepositoryChange in spec " + spec.id() + " assigns non-implementable requirement: " + requirementId);
+        }
+      }
+      for (String acceptanceCriterionId : nvl(change.acceptanceCriteria())) {
+        if (nonImplementableAcceptanceCriteria.contains(acceptanceCriterionId)) {
+          add(strict, errors, warnings, "RepositoryChange in spec " + spec.id() + " assigns non-implementable acceptance criterion: " + acceptanceCriterionId);
+        }
+      }
+    }
+  }
+
+  private void validateAdrConsistency(
+      Spec spec, Map<String, Adr> adrs, boolean strict, List<String> errors, List<String> warnings) {
+    for (String adrId : nvl(spec.relatedAdrs())) {
+      Adr adr = adrs.get(adrId);
+      if (adr != null && "superseded".equalsIgnoreCase(adr.status())) {
+        add(strict, errors, warnings, "Spec " + spec.id() + " references superseded ADR: " + adrId);
+      }
+    }
+  }
+
+  private Set<String> nonImplementableRequirementIds(Spec spec) {
+    Set<String> ids = new LinkedHashSet<>();
+    for (Requirement requirement : nvl(spec.functionalRequirements())) {
+      if (!requirement.implementable()) ids.add(requirement.id());
+    }
+    for (Requirement requirement : nvl(spec.nonFunctionalRequirements())) {
+      if (!requirement.implementable()) ids.add(requirement.id());
+    }
+    return ids;
+  }
+
+  private Set<String> nonImplementableAcceptanceCriterionIds(Spec spec) {
+    return nvl(spec.acceptanceCriteria()).stream()
+        .filter(c -> !c.implementable())
+        .map(AcceptanceCriterion::id)
+        .collect(Collectors.toCollection(LinkedHashSet::new));
+  }
+
   private void add(
       boolean strict, List<String> errors, List<String> warnings, String message) {
     if (strict) errors.add(message);
@@ -489,6 +608,20 @@ public class WorkspaceValidator {
       }
     }
     return ids;
+  }
+
+  private List<Adr> adrs(Path root) throws IOException {
+    Path dir = root.resolve(".archcontext/adrs");
+    if (!Files.isDirectory(dir)) return List.of();
+    List<Adr> adrs = new ArrayList<>();
+    try (var paths = Files.list(dir)) {
+      for (Path path :
+          paths.filter(p -> p.getFileName().toString().endsWith(".yaml")).sorted().toList()) {
+        var doc = new dev.archcontext.yaml.YamlMapper().read(path);
+        if (doc.adr != null) adrs.add(doc.adr);
+      }
+    }
+    return adrs;
   }
 
   private static List<String> distinct(List<String> values) {

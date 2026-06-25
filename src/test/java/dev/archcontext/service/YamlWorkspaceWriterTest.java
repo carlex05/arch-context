@@ -846,6 +846,51 @@ class YamlWorkspaceWriterTest {
   }
 
   @Test
+  void validateSpecConsistencyWarnsWhenRepositoryChangeUsesDeprecatedItems() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(specWithImplementationScope("SPEC-001", List.of("booking-api")), false);
+    writer.upsertSpecRepositoryChange(
+        "SPEC-001", repositoryChange("booking-api", List.of("FR-001"), List.of("AC-001")), false);
+    writer.deprecateSpecRequirement(
+        "SPEC-001", "functional", "FR-001", "obsolete", "No longer needed.", null, null, false);
+
+    WriteValidation result = writer.validateSpecConsistency("SPEC-001", false);
+
+    assertTrue(
+        result.warnings().stream()
+            .anyMatch(w -> w.contains("non-implementable requirement") && w.contains("FR-001")));
+  }
+
+  @Test
+  void validateSpecConsistencyErrorsInStrictModeForSupersededAdrReference() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(spec("SPEC-001", List.of("booking-api")), false);
+    writer.createAdr(adr("ADR-001", List.of("booking-api"), List.of("SPEC-001")), false);
+    writer.upsertSpecRelatedAdr("SPEC-001", "ADR-001", "decision", "Initial decision.", false);
+    writer.updateAdrStatus("ADR-001", "superseded", "ADR-002", "Replaced.", false);
+
+    WriteValidation result = writer.validateSpecConsistency("SPEC-001", true);
+
+    assertTrue(result.errors().stream().anyMatch(e -> e.contains("superseded ADR")));
+  }
+
+  @Test
+  void suggestNextIdsUseExistingNumericSuffixes() throws Exception {
+    writer.upsertRepository(repository("booking-api", "Booking API"), false);
+    writer.createSpec(specWithImplementationScope("SPEC-001", List.of("booking-api")), false);
+    writer.upsertSpecRequirement(
+        "SPEC-001", "functional", new Requirement("FR-02", "Second requirement."), false);
+    writer.upsertSpecAcceptanceCriterion(
+        "SPEC-001", new AcceptanceCriterion("AC-02", "Second criterion."), false);
+    writer.upsertSpecConstraint(
+        "SPEC-001", new Constraint("CON-02", "Second", "Second constraint."), false);
+
+    assertEquals("FR-03", writer.suggestNextRequirementId("SPEC-001", "functional").get("nextId"));
+    assertEquals("AC-03", writer.suggestNextAcceptanceCriterionId("SPEC-001").get("nextId"));
+    assertEquals("CON-03", writer.suggestNextConstraintId("SPEC-001").get("nextId"));
+  }
+
+  @Test
   void validateWorkspaceDetectsUnknownRepositoryReference() throws Exception {
     writer.createSpec(spec("SPEC-001", List.of("unknown-api")), true);
     Path specPath = root.resolve(".archcontext/specs/spec-001.yaml");

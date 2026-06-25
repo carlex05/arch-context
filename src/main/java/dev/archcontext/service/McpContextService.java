@@ -108,6 +108,15 @@ public class McpContextService {
   }
 
   public ImplementationContext getImplementationContextForSpec(String specId, String repoId) {
+    return getImplementationContextForSpec(specId, repoId, false, "summary", 5);
+  }
+
+  public ImplementationContext getImplementationContextForSpec(
+      String specId,
+      String repoId,
+      boolean includeSuperseded,
+      String includeChangeLog,
+      int maxHistoricalItems) {
     Spec s = getSpecContext(specId);
     List<RepositoryDefinition> affected =
         l.repositories().stream()
@@ -128,18 +137,27 @@ public class McpContextService {
         summary(s),
         affected,
         rc,
-        implementableRequirements(s.functionalRequirements()),
-        implementableRequirements(s.nonFunctionalRequirements()),
-        implementableAcceptanceCriteria(s.acceptanceCriteria()),
+        requirements(s.functionalRequirements(), includeSuperseded),
+        requirements(s.nonFunctionalRequirements(), includeSuperseded),
+        acceptanceCriteria(s.acceptanceCriteria(), includeSuperseded),
         nvl(s.constraints()),
-        implementableConstraints(s.structuredConstraints()),
-        recentChangeLog(s.changeLog()),
+        constraints(s.structuredConstraints(), includeSuperseded),
+        changeLog(s.changeLog(), includeChangeLog, maxHistoricalItems),
         adrs,
         gs);
   }
 
   public RepositoryImplementationContext getRepositoryImplementationContextForSpec(
       String specId, String repoId) {
+    return getRepositoryImplementationContextForSpec(specId, repoId, false, "summary", 5);
+  }
+
+  public RepositoryImplementationContext getRepositoryImplementationContextForSpec(
+      String specId,
+      String repoId,
+      boolean includeSuperseded,
+      String includeChangeLog,
+      int maxHistoricalItems) {
     Spec spec = getSpecContext(specId);
     RepositoryDefinition repository =
         l.repository(repoId)
@@ -172,20 +190,30 @@ public class McpContextService {
         repository,
         repositoryChange,
         otherAffectedRepositories,
-        filterRequirements(spec.functionalRequirements(), requirementIds),
-        filterRequirements(spec.nonFunctionalRequirements(), requirementIds),
-        filterAcceptanceCriteria(spec.acceptanceCriteria(), acceptanceCriterionIds),
+        filterRequirements(spec.functionalRequirements(), requirementIds, includeSuperseded),
+        filterRequirements(spec.nonFunctionalRequirements(), requirementIds, includeSuperseded),
+        filterAcceptanceCriteria(spec.acceptanceCriteria(), acceptanceCriterionIds, includeSuperseded),
         nvl(spec.constraints()),
-        implementableConstraints(spec.structuredConstraints()),
-        recentChangeLog(spec.changeLog()),
+        constraints(spec.structuredConstraints(), includeSuperseded),
+        changeLog(spec.changeLog(), includeChangeLog, maxHistoricalItems),
         adrs,
         applicableGuidelines(repository));
   }
 
   public AgentBriefing getAgentBriefingForSpec(String specId, String repoId) {
+    return getAgentBriefingForSpec(specId, repoId, false, "summary", 5);
+  }
+
+  public AgentBriefing getAgentBriefingForSpec(
+      String specId,
+      String repoId,
+      boolean includeSuperseded,
+      String includeChangeLog,
+      int maxHistoricalItems) {
     Spec spec = getSpecContext(specId);
     RepositoryImplementationContext repositoryContext =
-        getRepositoryImplementationContextForSpec(specId, repoId);
+        getRepositoryImplementationContextForSpec(
+            specId, repoId, includeSuperseded, includeChangeLog, maxHistoricalItems);
     List<Principle> principles =
         l.principles().stream()
             .filter(
@@ -301,30 +329,48 @@ public class McpContextService {
 
   private List<Requirement> filterRequirements(
       List<Requirement> requirements, Set<String> applicableIds) {
-    Stream<Requirement> stream = nvl(requirements).stream().filter(Requirement::implementable);
+    return filterRequirements(requirements, applicableIds, false);
+  }
+
+  private List<Requirement> filterRequirements(
+      List<Requirement> requirements, Set<String> applicableIds, boolean includeSuperseded) {
+    Stream<Requirement> stream = requirements(requirements, includeSuperseded).stream();
     if (applicableIds == null) return stream.toList();
     return stream.filter(r -> applicableIds.contains(r.id())).toList();
   }
 
-  private List<Requirement> implementableRequirements(List<Requirement> requirements) {
-    return nvl(requirements).stream().filter(Requirement::implementable).toList();
+  private List<Requirement> requirements(List<Requirement> requirements, boolean includeSuperseded) {
+    Stream<Requirement> stream = nvl(requirements).stream();
+    if (!includeSuperseded) stream = stream.filter(Requirement::implementable);
+    return stream.toList();
   }
 
   private List<AcceptanceCriterion> filterAcceptanceCriteria(
       List<AcceptanceCriterion> acceptanceCriteria, Set<String> applicableIds) {
+    return filterAcceptanceCriteria(acceptanceCriteria, applicableIds, false);
+  }
+
+  private List<AcceptanceCriterion> filterAcceptanceCriteria(
+      List<AcceptanceCriterion> acceptanceCriteria,
+      Set<String> applicableIds,
+      boolean includeSuperseded) {
     Stream<AcceptanceCriterion> stream =
-        nvl(acceptanceCriteria).stream().filter(AcceptanceCriterion::implementable);
+        acceptanceCriteria(acceptanceCriteria, includeSuperseded).stream();
     if (applicableIds == null) return stream.toList();
     return stream.filter(c -> applicableIds.contains(c.id())).toList();
   }
 
-  private List<AcceptanceCriterion> implementableAcceptanceCriteria(
-      List<AcceptanceCriterion> acceptanceCriteria) {
-    return nvl(acceptanceCriteria).stream().filter(AcceptanceCriterion::implementable).toList();
+  private List<AcceptanceCriterion> acceptanceCriteria(
+      List<AcceptanceCriterion> acceptanceCriteria, boolean includeSuperseded) {
+    Stream<AcceptanceCriterion> stream = nvl(acceptanceCriteria).stream();
+    if (!includeSuperseded) stream = stream.filter(AcceptanceCriterion::implementable);
+    return stream.toList();
   }
 
-  private List<Constraint> implementableConstraints(List<Constraint> constraints) {
-    return nvl(constraints).stream().filter(Constraint::implementable).toList();
+  private List<Constraint> constraints(List<Constraint> constraints, boolean includeSuperseded) {
+    Stream<Constraint> stream = nvl(constraints).stream();
+    if (!includeSuperseded) stream = stream.filter(Constraint::implementable);
+    return stream.toList();
   }
 
   private Set<String> relatedAdrIds(Spec spec) {
@@ -346,8 +392,16 @@ public class McpContextService {
   }
 
   private List<ChangeLogEntry> recentChangeLog(List<ChangeLogEntry> changeLog) {
+    return changeLog(changeLog, "summary", 5);
+  }
+
+  private List<ChangeLogEntry> changeLog(
+      List<ChangeLogEntry> changeLog, String includeChangeLog, int maxHistoricalItems) {
+    if ("none".equalsIgnoreCase(String.valueOf(includeChangeLog))) return List.of();
     List<ChangeLogEntry> changes = nvl(changeLog);
-    int from = Math.max(0, changes.size() - 5);
+    if ("full".equalsIgnoreCase(String.valueOf(includeChangeLog))) return changes;
+    int limit = maxHistoricalItems <= 0 ? 5 : maxHistoricalItems;
+    int from = Math.max(0, changes.size() - limit);
     return changes.subList(from, changes.size());
   }
 

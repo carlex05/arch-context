@@ -165,6 +165,48 @@ class ArchContextCoreTest {
   }
 
   @Test
+  void agentBriefingCanIncludeSupersededItemsAndFullChangeLog() throws Exception {
+    writeWorkspace(dir);
+    Path specPath = dir.resolve(".archcontext/specs/SPEC-001.yaml");
+    String spec = Files.readString(specPath);
+    spec =
+        spec.replace(
+            "    - id: AC-001\n"
+                + "      description: Remaining items stay active.\n",
+            "    - id: AC-001\n"
+                + "      description: Remaining items stay active.\n"
+                + "      status: superseded\n"
+                + "      obsoleteReason: Covered by AC-002.\n"
+                + "      supersededBy: AC-002\n"
+                + "    - id: AC-002\n"
+                + "      description: Replacement criterion.\n");
+    spec =
+        spec.replace(
+            "  relatedAdrs: [ADR-001]\n",
+            "  changeLog:\n"
+                + "    - id: CHG-001\n"
+                + "      date: \"2026-06-20\"\n"
+                + "      summary: Change 1.\n"
+                + "      reason: Reason 1.\n"
+                + "    - id: CHG-002\n"
+                + "      date: \"2026-06-21\"\n"
+                + "      summary: Change 2.\n"
+                + "      reason: Reason 2.\n"
+                + "  relatedAdrs: [ADR-001]\n");
+    spec = spec.replace("      acceptanceCriteria: [AC-001]\n", "      acceptanceCriteria: [AC-001, AC-002]\n");
+    Files.writeString(specPath, spec);
+
+    McpContextService service = new McpContextService(dir);
+    AgentBriefing defaultBriefing = service.getAgentBriefingForSpec("SPEC-001", "booking-api");
+    AgentBriefing fullBriefing =
+        service.getAgentBriefingForSpec("SPEC-001", "booking-api", true, "full", 1);
+
+    assertEquals(List.of("AC-002"), defaultBriefing.acceptanceCriteria().stream().map(AcceptanceCriterion::id).toList());
+    assertEquals(List.of("AC-001", "AC-002"), fullBriefing.acceptanceCriteria().stream().map(AcceptanceCriterion::id).toList());
+    assertEquals(List.of("CHG-001", "CHG-002"), fullBriefing.recentChanges().stream().map(ChangeLogEntry::id).toList());
+  }
+
+  @Test
   void workspaceValidationRequiresImportedDatabase() throws Exception {
     new WorkspaceService().init(dir);
 
