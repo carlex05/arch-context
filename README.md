@@ -165,6 +165,61 @@ For opencode:
 }
 ```
 
+## Initialize a new ArchContext workspace
+
+After installing the `archcontext` wrapper, initialize a new folder with its own
+versioned architecture context:
+
+```bash
+mkdir my-workspace
+cd my-workspace
+git init
+archcontext init --root .
+```
+
+This creates:
+
+```text
+.archcontext/
+  .gitignore
+  local.yaml
+  repositories.yaml
+  solution.yaml
+```
+
+Edit or create the shared context files:
+
+```text
+.archcontext/solution.yaml
+.archcontext/repositories.yaml
+.archcontext/specs/*.yaml
+.archcontext/adrs/*.yaml
+.archcontext/guidelines/*.yaml
+```
+
+Refresh the local SQLite index and validate the workspace:
+
+```bash
+archcontext import --root .
+archcontext doctor --root .
+```
+
+Commit only the shared, versionable context:
+
+```bash
+git add .archcontext/.gitignore \
+  .archcontext/solution.yaml \
+  .archcontext/repositories.yaml \
+  .archcontext/specs \
+  .archcontext/adrs \
+  .archcontext/guidelines
+
+git commit -m "Initialize ArchContext workspace"
+```
+
+Do not commit `.archcontext/local.yaml` or `.archcontext/archcontext.db`; they
+are developer-local or generated files and are ignored by `.archcontext/.gitignore`.
+
 ## Release publishing checklist
 
 1. Build and test:
