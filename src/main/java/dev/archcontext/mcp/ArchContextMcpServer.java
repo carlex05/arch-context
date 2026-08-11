@@ -21,6 +21,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.function.Supplier;
 
 public class ArchContextMcpServer {
   private static final String JSON_MIME_TYPE = "application/json";
@@ -29,6 +30,7 @@ public class ArchContextMcpServer {
   private final McpContextService svc;
   private final YamlWorkspaceWriter writer;
   private final McpJsonMapper jsonMapper;
+  private final Object requestLock = new Object();
 
   public ArchContextMcpServer(Path root) {
     this(root, new JacksonMcpJsonMapperSupplier().get());
@@ -42,7 +44,15 @@ public class ArchContextMcpServer {
   }
 
   private void warmUpAsync() {
-    Thread thread = new Thread(svc::warmUp, "archcontext-mcp-warmup");
+    Thread thread =
+        new Thread(
+            () ->
+                serializeRequest(
+                    () -> {
+                      svc.warmUp();
+                      return null;
+                    }),
+            "archcontext-mcp-warmup");
     thread.setDaemon(true);
     thread.start();
   }
@@ -1122,10 +1132,11 @@ public class ArchContextMcpServer {
 
   private McpSchema.ReadResourceResult readResource(
       Object exchange, McpSchema.ReadResourceRequest request) {
+    String content = serializeRequest(() -> svc.readResource(request.uri()));
     return new McpSchema.ReadResourceResult(
         List.of(
             new McpSchema.TextResourceContents(
-                request.uri(), JSON_MIME_TYPE, svc.readResource(request.uri()))));
+                request.uri(), JSON_MIME_TYPE, content)));
   }
 
   private McpServerFeatures.SyncToolSpecification tool(
@@ -1144,7 +1155,7 @@ public class ArchContextMcpServer {
 
   private McpSchema.CallToolResult callTool(ToolHandler handler, Map<String, Object> arguments) {
     try {
-      Object data = handler.call(arguments == null ? Map.of() : arguments);
+      Object data = serializeRequest(() -> handler.call(arguments == null ? Map.of() : arguments));
       String content = Json.write(data);
       boolean isToolError =
           (data instanceof WriteResult result && !result.validation().errors().isEmpty())
@@ -1162,6 +1173,12 @@ public class ArchContextMcpServer {
           .content(List.of(new McpSchema.TextContent(e.getMessage())))
           .isError(true)
           .build();
+    }
+  }
+
+  <T> T serializeRequest(Supplier<T> work) {
+    synchronized (requestLock) {
+      return work.get();
     }
   }
 

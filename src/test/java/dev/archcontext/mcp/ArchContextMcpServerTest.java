@@ -6,6 +6,8 @@ import io.modelcontextprotocol.spec.McpSchema;
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 class ArchContextMcpServerTest {
@@ -318,6 +320,64 @@ class ArchContextMcpServerTest {
     assertFalse(
         ArchContextMcpServer.shouldIncludeStructuredContent(
             "x".repeat(ArchContextMcpServer.STRUCTURED_CONTENT_MAX_CHARS + 1)));
+  }
+
+  @Test
+  void mcpRequestWorkIsSerialized() throws Exception {
+    ArchContextMcpServer server = new ArchContextMcpServer(Files.createTempDirectory("ac-mcp"));
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    CountDownLatch firstEntered = new CountDownLatch(1);
+    CountDownLatch secondReady = new CountDownLatch(1);
+    CountDownLatch releaseFirst = new CountDownLatch(1);
+    AtomicInteger active = new AtomicInteger();
+    AtomicInteger maxActive = new AtomicInteger();
+
+    try {
+      Future<Integer> first =
+          executor.submit(
+              () ->
+                  server.serializeRequest(
+                      () -> {
+                        firstEntered.countDown();
+                        int current = active.incrementAndGet();
+                        maxActive.accumulateAndGet(current, Math::max);
+                        try {
+                          assertTrue(releaseFirst.await(1, TimeUnit.SECONDS));
+                        } catch (InterruptedException e) {
+                          Thread.currentThread().interrupt();
+                          fail(e);
+                        } finally {
+                          active.decrementAndGet();
+                        }
+                        return current;
+                      }));
+
+      assertTrue(firstEntered.await(1, TimeUnit.SECONDS));
+
+      Future<Integer> second =
+          executor.submit(
+              () -> {
+                secondReady.countDown();
+                return server.serializeRequest(
+                    () -> {
+                      int current = active.incrementAndGet();
+                      maxActive.accumulateAndGet(current, Math::max);
+                      active.decrementAndGet();
+                      return current;
+                    });
+              });
+
+      assertTrue(secondReady.await(1, TimeUnit.SECONDS));
+      assertFalse(second.isDone());
+      releaseFirst.countDown();
+
+      assertEquals(1, first.get(1, TimeUnit.SECONDS));
+      assertEquals(1, second.get(1, TimeUnit.SECONDS));
+      assertEquals(1, maxActive.get());
+    } finally {
+      releaseFirst.countDown();
+      executor.shutdownNow();
+    }
   }
 
   private static void assertStrictNoArgSchema(McpSchema.Tool tool) {
