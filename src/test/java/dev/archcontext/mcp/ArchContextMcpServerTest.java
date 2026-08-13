@@ -30,14 +30,16 @@ class ArchContextMcpServerTest {
             "archcontext://repositories",
             "archcontext://specs",
             "archcontext://adrs",
-            "archcontext://guidelines"),
+            "archcontext://guidelines",
+            "archcontext://reviews"),
         server.resourceSpecifications().stream().map(s -> s.resource().uri()).toList());
 
     assertEquals(
         List.of(
             "archcontext://repositories/{repositoryId}",
             "archcontext://specs/{specId}",
-            "archcontext://adrs/{adrId}"),
+            "archcontext://adrs/{adrId}",
+            "archcontext://reviews/{reviewId}"),
         server.resourceTemplateSpecifications().stream()
             .map(s -> s.resourceTemplate().uriTemplate())
             .toList());
@@ -103,6 +105,13 @@ class ArchContextMcpServerTest {
             "update_adr_status",
             "append_adr_change",
             "supersede_adr",
+            "create_implementation_review",
+            "upsert_review_finding",
+            "update_review_finding_status",
+            "update_implementation_review_status",
+            "get_implementation_review",
+            "list_implementation_reviews",
+            "get_review_briefing_for_developer",
             "validate_workspace",
             "validate_spec_repository_coverage"),
         tools.keySet());
@@ -287,6 +296,27 @@ class ArchContextMcpServerTest {
     assertProperty(tools.get("validate_workspace"), "strict");
     assertRequired(tools.get("validate_spec_repository_coverage"), "specId");
     assertProperty(tools.get("validate_spec_repository_coverage"), "strict");
+    assertRequired(tools.get("create_implementation_review"), "id");
+    assertRequired(tools.get("create_implementation_review"), "specId");
+    assertRequired(tools.get("create_implementation_review"), "repositoryId");
+    assertRequired(tools.get("create_implementation_review"), "commit");
+    assertProperty(tools.get("create_implementation_review"), "findings");
+    assertRequired(tools.get("upsert_review_finding"), "reviewId");
+    assertRequired(tools.get("upsert_review_finding"), "id");
+    assertProperty(tools.get("upsert_review_finding"), "proposedActions");
+    assertRequired(tools.get("update_review_finding_status"), "reviewId");
+    assertRequired(tools.get("update_review_finding_status"), "findingId");
+    assertRequired(tools.get("update_review_finding_status"), "status");
+    assertProperty(tools.get("update_review_finding_status"), "relatedAdr");
+    assertProperty(tools.get("update_review_finding_status"), "relatedConstraint");
+    assertRequired(tools.get("update_implementation_review_status"), "reviewId");
+    assertRequired(tools.get("update_implementation_review_status"), "status");
+    assertRequired(tools.get("get_implementation_review"), "reviewId");
+    assertProperty(tools.get("list_implementation_reviews"), "specId");
+    assertProperty(tools.get("list_implementation_reviews"), "repositoryId");
+    assertProperty(tools.get("list_implementation_reviews"), "status");
+    assertRequired(tools.get("get_review_briefing_for_developer"), "reviewId");
+    assertProperty(tools.get("get_review_briefing_for_developer"), "includeResolved");
   }
 
   @Test

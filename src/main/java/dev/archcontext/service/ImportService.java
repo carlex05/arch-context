@@ -27,6 +27,7 @@ public class ImportService {
         importDocumentDir(c, dir.resolve("specs"), "spec");
         importDocumentDir(c, dir.resolve("adrs"), "adr");
         importDocumentDir(c, dir.resolve("guidelines"), "guideline");
+        importDocumentDir(c, dir.resolve("reviews"), "review");
         c.commit();
       }
     } catch (Exception e) {
@@ -55,6 +56,31 @@ public class ImportService {
       }
     } catch (Exception e) {
       throw new IllegalStateException("Spec import failed: " + e.getMessage(), e);
+    }
+  }
+
+  public void importReviewFile(Path root, Path reviewFile, String previousReviewId) {
+    try {
+      Database db = new Database(root.resolve(".archcontext/archcontext.db"));
+      db.migrate();
+      YamlDocuments document = yaml.read(reviewFile);
+      if (document.implementationReview == null) {
+        throw new IllegalArgumentException(
+            "YAML file does not contain an implementation review: " + reviewFile);
+      }
+      ImplementationReview review = document.implementationReview;
+      String content = Files.readString(reviewFile);
+      try (Connection c = db.connect()) {
+        c.setAutoCommit(false);
+        deleteDocument(c, "review", previousReviewId);
+        if (!Objects.equals(previousReviewId, review.id())) {
+          deleteDocument(c, "review", review.id());
+        }
+        importReview(c, review, reviewFile, content);
+        c.commit();
+      }
+    } catch (Exception e) {
+      throw new IllegalStateException("Review import failed: " + e.getMessage(), e);
     }
   }
 
@@ -96,6 +122,22 @@ public class ImportService {
     }
     try (PreparedStatement ps = c.prepareStatement("DELETE FROM specs WHERE id = ?")) {
       ps.setString(1, specId);
+      ps.executeUpdate();
+    }
+  }
+
+  private void deleteDocument(Connection c, String type, String documentKey) throws SQLException {
+    if (documentKey == null || documentKey.isBlank()) return;
+    try (PreparedStatement ps =
+        c.prepareStatement("DELETE FROM document_chunks WHERE type = ? AND document_key = ?")) {
+      ps.setString(1, type);
+      ps.setString(2, documentKey);
+      ps.executeUpdate();
+    }
+    try (PreparedStatement ps =
+        c.prepareStatement("DELETE FROM documents WHERE type = ? AND document_key = ?")) {
+      ps.setString(1, type);
+      ps.setString(2, documentKey);
       ps.executeUpdate();
     }
   }
@@ -167,6 +209,8 @@ public class ImportService {
         if ("adr".equals(type) && d.adr != null) importAdr(c, d.adr, p, content);
         if ("guideline".equals(type) && d.guideline != null)
           importGuideline(c, d.guideline, p, content);
+        if ("review".equals(type) && d.implementationReview != null)
+          importReview(c, d.implementationReview, p, content);
       }
     }
   }
@@ -245,6 +289,13 @@ public class ImportService {
       ps.setString(6, p.toString());
       ps.executeUpdate();
     }
+  }
+
+  private void importReview(Connection c, ImplementationReview review, Path path, String content)
+      throws Exception {
+    String title =
+        review.summary() == null || review.summary().isBlank() ? review.id() : review.summary();
+    upsertDoc(c, "review", review.id(), title, path, content);
   }
 
   private void upsertDoc(

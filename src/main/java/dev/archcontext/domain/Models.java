@@ -3,6 +3,7 @@ package dev.archcontext.domain;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public final class Models {
   private Models() {}
@@ -404,6 +405,87 @@ public final class Models {
     }
   }
 
+  public record ReviewEvidence(
+      String path, Integer lineStart, Integer lineEnd, String note) {}
+
+  public record ProposedReviewAction(
+      String id,
+      String type,
+      String status,
+      String targetId,
+      String title,
+      String description) {}
+
+  public record FindingResolution(
+      String summary,
+      String resolvedDate,
+      String resolvedBy,
+      String relatedAdr,
+      String relatedConstraint) {}
+
+  public record ReviewFinding(
+      String id,
+      String type,
+      String severity,
+      String category,
+      String status,
+      String title,
+      String description,
+      List<ReviewEvidence> evidence,
+      List<String> relatedRequirements,
+      List<String> relatedAcceptanceCriteria,
+      List<String> relatedConstraints,
+      List<String> relatedAdrs,
+      String recommendation,
+      List<ProposedReviewAction> proposedActions,
+      FindingResolution resolution) {
+    public ReviewFinding {
+      evidence = evidence == null ? List.of() : evidence;
+      relatedRequirements = relatedRequirements == null ? List.of() : relatedRequirements;
+      relatedAcceptanceCriteria =
+          relatedAcceptanceCriteria == null ? List.of() : relatedAcceptanceCriteria;
+      relatedConstraints = relatedConstraints == null ? List.of() : relatedConstraints;
+      relatedAdrs = relatedAdrs == null ? List.of() : relatedAdrs;
+      proposedActions = proposedActions == null ? List.of() : proposedActions;
+    }
+
+    public boolean actionable() {
+      return !Set.of("resolved", "wont-fix", "dismissed")
+          .contains(String.valueOf(status).toLowerCase(java.util.Locale.ROOT));
+    }
+  }
+
+  public record ImplementationReview(
+      String id,
+      String specId,
+      String repositoryId,
+      String branch,
+      String commit,
+      String reviewer,
+      String reviewDate,
+      String status,
+      String summary,
+      String statusNote,
+      List<ReviewFinding> findings,
+      String sourcePath) {
+    public ImplementationReview {
+      findings = findings == null ? List.of() : findings;
+    }
+  }
+
+  public record ImplementationReviewSummary(
+      String id,
+      String specId,
+      String repositoryId,
+      String branch,
+      String commit,
+      String reviewer,
+      String reviewDate,
+      String status,
+      String summary,
+      long actionableFindings,
+      int totalFindings) {}
+
   public record Guideline(
       String id,
       String title,
@@ -546,6 +628,15 @@ public final class Models {
       List<String> constraints,
       List<Constraint> structuredConstraints,
       List<ChangeLogEntry> recentChanges,
+      List<Adr> relatedAdrs,
+      List<Guideline> applicableGuidelines) {}
+
+  public record DeveloperReviewBriefing(
+      SpecSummary spec,
+      RepositoryDefinition repository,
+      RepositoryChange repositoryChange,
+      ImplementationReview review,
+      List<Constraint> activeConstraints,
       List<Adr> relatedAdrs,
       List<Guideline> applicableGuidelines) {}
 

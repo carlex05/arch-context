@@ -12,4 +12,5 @@ public class YamlDocuments {
   public Spec spec;
   public Adr adr;
   public Guideline guideline;
+  public ImplementationReview implementationReview;
 }

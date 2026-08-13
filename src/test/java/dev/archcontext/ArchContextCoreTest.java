@@ -27,6 +27,7 @@ class ArchContextCoreTest {
     assertTrue(Files.exists(ac.resolve("repositories.yaml")));
     assertTrue(Files.exists(ac.resolve("local.yaml")));
     assertTrue(Files.isDirectory(ac.resolve("specs")));
+    assertTrue(Files.isDirectory(ac.resolve("reviews")));
     assertTrue(Files.readString(ac.resolve(".gitignore")).contains("archcontext.db"));
   }
 

@@ -20,6 +20,7 @@ public class WorkspaceService {
     Files.createDirectories(dir.resolve("specs"));
     Files.createDirectories(dir.resolve("adrs"));
     Files.createDirectories(dir.resolve("guidelines"));
+    Files.createDirectories(dir.resolve("reviews"));
     writeIfMissing(dir.resolve("solution.yaml"), defaultSolution());
     writeIfMissing(dir.resolve("repositories.yaml"), defaultRepos());
     writeIfMissing(dir.resolve("local.yaml"), "schemaVersion: \"1.0\"\nlocalRepositories: {}\n");

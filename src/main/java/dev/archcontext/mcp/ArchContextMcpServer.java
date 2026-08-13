@@ -97,14 +97,16 @@ public class ArchContextMcpServer {
         resource("archcontext://repositories", "Repositories"),
         resource("archcontext://specs", "Specs"),
         resource("archcontext://adrs", "ADRs"),
-        resource("archcontext://guidelines", "Guidelines"));
+        resource("archcontext://guidelines", "Guidelines"),
+        resource("archcontext://reviews", "Implementation reviews"));
   }
 
   List<McpServerFeatures.SyncResourceTemplateSpecification> resourceTemplateSpecifications() {
     return List.of(
         resourceTemplate("archcontext://repositories/{repositoryId}", "Repository"),
         resourceTemplate("archcontext://specs/{specId}", "Spec"),
-        resourceTemplate("archcontext://adrs/{adrId}", "ADR"));
+        resourceTemplate("archcontext://adrs/{adrId}", "ADR"),
+        resourceTemplate("archcontext://reviews/{reviewId}", "Implementation review"));
   }
 
   List<McpServerFeatures.SyncToolSpecification> toolSpecifications() {
@@ -129,7 +131,7 @@ public class ArchContextMcpServer {
             args -> svc.getRepositoryContext(requiredString(args, "repositoryId"))),
         tool(
             "search_context",
-            "Search specs, ADRs, guidelines, and solution context for targeted architecture"
+            "Search specs, ADRs, guidelines, implementation reviews, and solution context for targeted architecture"
                 + " information.",
             strictObjectSchema(
                 Map.of(
@@ -1057,6 +1059,126 @@ public class ArchContextMcpServer {
                     requiredString(args, "reason"),
                     bool(args.get("dryRun")))),
         tool(
+            "create_implementation_review",
+            "Create a traceable implementation review for one spec, repository, and Git commit.",
+            strictObjectSchema(
+                implementationReviewSchemaProperties(),
+                "id",
+                "specId",
+                "repositoryId",
+                "commit",
+                "reviewer",
+                "reviewDate",
+                "status",
+                "summary"),
+            args ->
+                writer.createImplementationReview(
+                    implementationReview(args), bool(args.get("dryRun")))),
+        tool(
+            "upsert_review_finding",
+            "Add or update one structured implementation review finding.",
+            strictObjectSchema(
+                reviewFindingSchemaProperties(),
+                "reviewId",
+                "id",
+                "type",
+                "severity",
+                "status",
+                "title",
+                "description"),
+            args ->
+                writer.upsertReviewFinding(
+                    requiredString(args, "reviewId"),
+                    reviewFinding(args),
+                    bool(args.get("dryRun")))),
+        tool(
+            "update_review_finding_status",
+            "Update a review finding status and record how it was resolved, including ADR or"
+                + " constraint links created from the review.",
+            strictObjectSchema(
+                Map.ofEntries(
+                    Map.entry("reviewId", stringProperty("Implementation review id")),
+                    Map.entry("findingId", stringProperty("Review finding id")),
+                    Map.entry(
+                        "status",
+                        stringProperty(
+                            "open, acknowledged, in-progress, resolved, wont-fix, or dismissed")),
+                    Map.entry("resolutionSummary", stringProperty("Resolution summary")),
+                    Map.entry("resolvedDate", stringProperty("Resolution date")),
+                    Map.entry("resolvedBy", stringProperty("Resolver or agent identifier")),
+                    Map.entry("relatedAdr", stringProperty("ADR created or used by the resolution")),
+                    Map.entry(
+                        "relatedConstraint",
+                        stringProperty("Spec constraint created or used by the resolution")),
+                    Map.entry("dryRun", booleanProperty("Validate and preview without writing"))),
+                "reviewId",
+                "findingId",
+                "status"),
+            args ->
+                writer.updateReviewFindingStatus(
+                    requiredString(args, "reviewId"),
+                    requiredString(args, "findingId"),
+                    requiredString(args, "status"),
+                    findingResolution(args),
+                    bool(args.get("dryRun")))),
+        tool(
+            "update_implementation_review_status",
+            "Update the lifecycle status of an implementation review.",
+            strictObjectSchema(
+                Map.of(
+                    "reviewId",
+                    stringProperty("Implementation review id"),
+                    "status",
+                    stringProperty("draft, in-progress, changes-requested, approved, or closed"),
+                    "note",
+                    stringProperty("Optional status note"),
+                    "dryRun",
+                    booleanProperty("Validate and preview without writing")),
+                "reviewId",
+                "status"),
+            args ->
+                writer.updateImplementationReviewStatus(
+                    requiredString(args, "reviewId"),
+                    requiredString(args, "status"),
+                    optionalString(args, "note"),
+                    bool(args.get("dryRun")))),
+        tool(
+            "get_implementation_review",
+            "Return one complete implementation review by id.",
+            strictObjectSchema(Map.of("reviewId", stringProperty("Implementation review id")), "reviewId"),
+            args -> svc.getImplementationReview(requiredString(args, "reviewId"))),
+        tool(
+            "list_implementation_reviews",
+            "List implementation reviews with optional spec, repository, and status filters.",
+            strictObjectSchema(
+                Map.of(
+                    "specId",
+                    stringProperty("Optional spec id"),
+                    "repositoryId",
+                    stringProperty("Optional repository id"),
+                    "status",
+                    stringProperty("Optional review status")),
+                List.of()),
+            args ->
+                svc.listImplementationReviews(
+                    optionalString(args, "specId"),
+                    optionalString(args, "repositoryId"),
+                    optionalString(args, "status"))),
+        tool(
+            "get_review_briefing_for_developer",
+            "Return a compact correction briefing with actionable findings and applicable"
+                + " architecture context for one implementation review.",
+            strictObjectSchema(
+                Map.of(
+                    "reviewId",
+                    stringProperty("Implementation review id"),
+                    "includeResolved",
+                    booleanProperty("Include resolved, dismissed, and wont-fix findings")),
+                "reviewId"),
+            args ->
+                svc.getReviewBriefingForDeveloper(
+                    requiredString(args, "reviewId"), bool(args.get("includeResolved")))),
+        tool(
             "validate_workspace",
             "Validate repository references, component references, active spec readiness, related"
                 + " ADR references, and supported schema versions without writing files.",
@@ -1256,6 +1378,60 @@ public class ArchContextMcpServer {
         Map.entry("relatedSpecs", stringArrayProperty("Related spec ids")),
         Map.entry("changeLog", arrayProperty("Structured ADR change log")),
         Map.entry("supersedes", stringArrayProperty("Superseded ADR ids")),
+        Map.entry("dryRun", booleanProperty("Validate and preview without writing")));
+  }
+
+  private static Map<String, Object> implementationReviewSchemaProperties() {
+    return Map.ofEntries(
+        Map.entry("id", stringProperty("Implementation review id")),
+        Map.entry("specId", stringProperty("Reviewed spec id")),
+        Map.entry("repositoryId", stringProperty("Reviewed repository id")),
+        Map.entry("branch", stringProperty("Reviewed Git branch")),
+        Map.entry("commit", stringProperty("Reviewed Git commit")),
+        Map.entry("reviewer", stringProperty("Reviewer or agent identifier")),
+        Map.entry("reviewDate", stringProperty("Review date")),
+        Map.entry("status", stringProperty("Implementation review status")),
+        Map.entry("summary", stringProperty("Review summary")),
+        Map.entry("statusNote", stringProperty("Optional review status note")),
+        Map.entry("findings", arrayProperty("Structured review findings")),
+        Map.entry("dryRun", booleanProperty("Validate and preview without writing")));
+  }
+
+  private static Map<String, Object> reviewFindingSchemaProperties() {
+    return Map.ofEntries(
+        Map.entry("reviewId", stringProperty("Implementation review id")),
+        Map.entry("id", stringProperty("Review finding id")),
+        Map.entry("type", stringProperty("Finding type, such as defect or constraint-required")),
+        Map.entry("severity", stringProperty("blocker, critical, major, minor, or info")),
+        Map.entry("category", stringProperty("Finding category")),
+        Map.entry("status", stringProperty("Review finding status")),
+        Map.entry("title", stringProperty("Finding title")),
+        Map.entry("description", stringProperty("Finding description")),
+        Map.entry("evidence", arrayProperty("Code paths and line ranges supporting the finding")),
+        Map.entry("relatedRequirements", stringArrayProperty("Related requirement ids")),
+        Map.entry(
+            "relatedAcceptanceCriteria", stringArrayProperty("Related acceptance criterion ids")),
+        Map.entry("relatedConstraints", stringArrayProperty("Related structured constraint ids")),
+        Map.entry("relatedAdrs", stringArrayProperty("Related ADR ids")),
+        Map.entry("recommendation", stringProperty("Recommended correction")),
+        Map.entry(
+            "proposedActions",
+            arrayProperty("Proposed context actions such as create-adr or add-constraint")),
+        Map.entry(
+            "resolution",
+            strictObjectSchema(
+                Map.of(
+                    "summary",
+                    stringProperty("Resolution summary"),
+                    "resolvedDate",
+                    stringProperty("Resolution date"),
+                    "resolvedBy",
+                    stringProperty("Resolver or agent identifier"),
+                    "relatedAdr",
+                    stringProperty("Related ADR id"),
+                    "relatedConstraint",
+                    stringProperty("Related constraint id")),
+                List.of())),
         Map.entry("dryRun", booleanProperty("Validate and preview without writing")));
   }
 
@@ -1483,6 +1659,56 @@ public class ArchContextMcpServer {
         list(args.get("changeLog"), ChangeLogEntry.class),
         stringList(args.get("supersedes")),
         null);
+  }
+
+  private static ImplementationReview implementationReview(Map<String, Object> args) {
+    return new ImplementationReview(
+        requiredString(args, "id"),
+        requiredString(args, "specId"),
+        requiredString(args, "repositoryId"),
+        optionalString(args, "branch"),
+        requiredString(args, "commit"),
+        requiredString(args, "reviewer"),
+        requiredString(args, "reviewDate"),
+        requiredString(args, "status"),
+        requiredString(args, "summary"),
+        optionalString(args, "statusNote"),
+        list(args.get("findings"), ReviewFinding.class),
+        null);
+  }
+
+  private static ReviewFinding reviewFinding(Map<String, Object> args) {
+    return new ReviewFinding(
+        requiredString(args, "id"),
+        requiredString(args, "type"),
+        requiredString(args, "severity"),
+        optionalString(args, "category"),
+        requiredString(args, "status"),
+        requiredString(args, "title"),
+        requiredString(args, "description"),
+        list(args.get("evidence"), ReviewEvidence.class),
+        stringList(args.get("relatedRequirements")),
+        stringList(args.get("relatedAcceptanceCriteria")),
+        stringList(args.get("relatedConstraints")),
+        stringList(args.get("relatedAdrs")),
+        optionalString(args, "recommendation"),
+        list(args.get("proposedActions"), ProposedReviewAction.class),
+        object(args.get("resolution"), FindingResolution.class));
+  }
+
+  private static FindingResolution findingResolution(Map<String, Object> args) {
+    String summary = optionalString(args, "resolutionSummary");
+    String resolvedDate = optionalString(args, "resolvedDate");
+    String resolvedBy = optionalString(args, "resolvedBy");
+    String relatedAdr = optionalString(args, "relatedAdr");
+    String relatedConstraint = optionalString(args, "relatedConstraint");
+    if (summary == null
+        && resolvedDate == null
+        && resolvedBy == null
+        && relatedAdr == null
+        && relatedConstraint == null) return null;
+    return new FindingResolution(
+        summary, resolvedDate, resolvedBy, relatedAdr, relatedConstraint);
   }
 
   private static <T> List<T> list(Object value, Class<T> type) {

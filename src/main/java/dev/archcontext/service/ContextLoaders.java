@@ -270,6 +270,39 @@ class ContextLoaders {
     return guidelines().stream().filter(g -> g.id().equals(id)).findFirst();
   }
 
+  List<ImplementationReview> implementationReviews() {
+    Path dir = root.resolve(".archcontext/reviews");
+    if (!Files.isDirectory(dir)) return List.of();
+    try (var paths = Files.list(dir)) {
+      List<ImplementationReview> reviews = new ArrayList<>();
+      for (Path path :
+          paths.filter(p -> p.getFileName().toString().endsWith(".yaml")).sorted().toList()) {
+        var doc = yaml.read(path);
+        if (doc.implementationReview != null) reviews.add(doc.implementationReview);
+      }
+      return reviews;
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  Optional<ImplementationReview> implementationReview(String id) {
+    Path dir = root.resolve(".archcontext/reviews");
+    if (!Files.isDirectory(dir)) return Optional.empty();
+    Path expected = dir.resolve(slug(id) + ".yaml");
+    if (Files.exists(expected)) {
+      try {
+        var doc = yaml.read(expected);
+        if (doc.implementationReview != null && id.equals(doc.implementationReview.id())) {
+          return Optional.of(doc.implementationReview);
+        }
+      } catch (Exception e) {
+        throw new IllegalStateException(e);
+      }
+    }
+    return implementationReviews().stream().filter(r -> id.equals(r.id())).findFirst();
+  }
+
   private List<String> impacts(String type, String id) throws SQLException {
     String sql =
         "spec".equals(type)

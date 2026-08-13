@@ -88,7 +88,10 @@ public class WorkspaceValidator {
           repositoryService.list(root).stream()
               .collect(Collectors.toMap(RepositoryDefinition::id, r -> r, (a, b) -> a));
       Set<String> adrIds = adrIds(root);
-      for (Spec spec : specs(root)) {
+      List<Spec> workspaceSpecs = specs(root);
+      Map<String, Spec> specsById =
+          workspaceSpecs.stream().collect(Collectors.toMap(Spec::id, s -> s, (a, b) -> a));
+      for (Spec spec : workspaceSpecs) {
         WriteValidation specValidation = validateSpec(spec, repositories);
         errors.addAll(specValidation.errors());
         warnings.addAll(specValidation.warnings());
@@ -110,6 +113,12 @@ public class WorkspaceValidator {
         if ("active".equalsIgnoreCase(spec.status()) && nvl(spec.acceptanceCriteria()).isEmpty()) {
           warnings.add("Active spec has no acceptance criteria: " + spec.id());
         }
+      }
+      for (ImplementationReview review : implementationReviews(root)) {
+        WriteValidation reviewValidation =
+            validateImplementationReview(review, specsById, repositories.keySet(), adrIds);
+        errors.addAll(reviewValidation.errors());
+        warnings.addAll(reviewValidation.warnings());
       }
     } catch (IOException e) {
       errors.add("Cannot validate workspace: " + e.getMessage());
@@ -177,6 +186,68 @@ public class WorkspaceValidator {
     }
 
     return new WriteValidation(errors, warnings);
+  }
+
+  public WriteValidation validateImplementationReview(Path root, ImplementationReview review) {
+    try {
+      Map<String, Spec> specs =
+          specs(root).stream().collect(Collectors.toMap(Spec::id, s -> s, (a, b) -> a));
+      Set<String> repositoryIds =
+          repositoryService.list(root).stream()
+              .map(RepositoryDefinition::id)
+              .collect(Collectors.toSet());
+      return validateImplementationReview(review, specs, repositoryIds, adrIds(root));
+    } catch (IOException e) {
+      return new WriteValidation(
+          List.of("Cannot validate implementation review references: " + e.getMessage()), List.of());
+    }
+  }
+
+  private WriteValidation validateImplementationReview(
+      ImplementationReview review,
+      Map<String, Spec> specs,
+      Set<String> repositoryIds,
+      Set<String> adrIds) {
+    List<String> errors = new ArrayList<>();
+    List<String> warnings = new ArrayList<>();
+    if (review == null) {
+      return new WriteValidation(List.of("Implementation review is required."), List.of());
+    }
+    if (blank(review.id())) errors.add("Implementation review id is required.");
+    if (blank(review.specId())) errors.add("Implementation review specId is required.");
+    if (blank(review.repositoryId())) errors.add("Implementation review repositoryId is required.");
+    if (blank(review.commit())) errors.add("Implementation review commit is required.");
+    if (blank(review.reviewer())) errors.add("Implementation review reviewer is required.");
+    if (blank(review.reviewDate())) errors.add("Implementation review reviewDate is required.");
+    if (!Set.of("draft", "in-progress", "changes-requested", "approved", "closed")
+        .contains(String.valueOf(review.status()).toLowerCase(Locale.ROOT))) {
+      errors.add("Invalid implementation review status: " + review.status());
+    }
+    if (blank(review.summary())) warnings.add("Implementation review summary is missing.");
+    requireUnique(
+        nvl(review.findings()).stream().map(ReviewFinding::id).toList(),
+        "Duplicate review finding id: ",
+        errors);
+    if ("approved".equalsIgnoreCase(review.status())
+        && nvl(review.findings()).stream().anyMatch(ReviewFinding::actionable)) {
+      errors.add("Approved implementation review cannot contain actionable findings: " + review.id());
+    }
+
+    Spec spec = specs.get(review.specId());
+    if (spec == null) errors.add("Unknown specId: " + review.specId());
+    if (!repositoryIds.contains(review.repositoryId())) {
+      errors.add("Unknown repositoryId: " + review.repositoryId());
+    } else if (spec != null && !nvl(spec.affectedRepositories()).contains(review.repositoryId())) {
+      errors.add(
+          "Review repository must be affected by spec "
+              + review.specId()
+              + ": "
+              + review.repositoryId());
+    }
+    for (ReviewFinding finding : nvl(review.findings())) {
+      validateReviewFinding(finding, spec, adrIds, errors, warnings);
+    }
+    return new WriteValidation(distinct(errors), distinct(warnings));
   }
 
   public WriteValidation validateSpecRepositoryCoverage(Path root, Spec spec, boolean strict) {
@@ -298,6 +369,7 @@ public class WorkspaceValidator {
     Path specsDir = archContextDir.resolve("specs").normalize();
     Path adrsDir = archContextDir.resolve("adrs").normalize();
     Path guidelinesDir = archContextDir.resolve("guidelines").normalize();
+    Path reviewsDir = archContextDir.resolve("reviews").normalize();
     boolean knownRepositoriesFile = normalizedTarget.equals(repositoriesFile);
     boolean knownSolutionFile = normalizedTarget.equals(solutionFile);
     boolean knownSpecFile =
@@ -312,11 +384,16 @@ public class WorkspaceValidator {
         normalizedTarget.getParent() != null
             && normalizedTarget.getParent().normalize().equals(guidelinesDir)
             && normalizedTarget.getFileName().toString().endsWith(".yaml");
+    boolean knownReviewFile =
+        normalizedTarget.getParent() != null
+            && normalizedTarget.getParent().normalize().equals(reviewsDir)
+            && normalizedTarget.getFileName().toString().endsWith(".yaml");
     if (!knownRepositoriesFile
         && !knownSolutionFile
         && !knownSpecFile
         && !knownAdrFile
-        && !knownGuidelineFile) {
+        && !knownGuidelineFile
+        && !knownReviewFile) {
       throw new IllegalArgumentException("Unsupported ArchContext write target: " + target);
     }
   }
@@ -541,7 +618,7 @@ public class WorkspaceValidator {
       Path file = dir.resolve(name);
       if (Files.exists(file)) files.add(file);
     }
-    for (String subdir : List.of("specs", "adrs", "guidelines")) {
+    for (String subdir : List.of("specs", "adrs", "guidelines", "reviews")) {
       Path child = dir.resolve(subdir);
       if (Files.isDirectory(child)) {
         try (var paths = Files.list(child)) {
@@ -622,6 +699,116 @@ public class WorkspaceValidator {
       }
     }
     return adrs;
+  }
+
+  private List<ImplementationReview> implementationReviews(Path root) throws IOException {
+    Path dir = root.resolve(".archcontext/reviews");
+    if (!Files.isDirectory(dir)) return List.of();
+    List<ImplementationReview> reviews = new ArrayList<>();
+    try (var paths = Files.list(dir)) {
+      for (Path path :
+          paths.filter(p -> p.getFileName().toString().endsWith(".yaml")).sorted().toList()) {
+        var doc = new dev.archcontext.yaml.YamlMapper().read(path);
+        if (doc.implementationReview != null) reviews.add(doc.implementationReview);
+      }
+    }
+    return reviews;
+  }
+
+  private void validateReviewFinding(
+      ReviewFinding finding,
+      Spec spec,
+      Set<String> adrIds,
+      List<String> errors,
+      List<String> warnings) {
+    if (finding == null) {
+      errors.add("Implementation review contains a null finding.");
+      return;
+    }
+    if (blank(finding.id())) errors.add("Review finding id is required.");
+    if (blank(finding.type())) errors.add("Review finding type is required: " + finding.id());
+    if (!Set.of("blocker", "critical", "major", "minor", "info")
+        .contains(String.valueOf(finding.severity()).toLowerCase(Locale.ROOT))) {
+      errors.add("Invalid review finding severity in " + finding.id() + ": " + finding.severity());
+    }
+    if (!Set.of("open", "acknowledged", "in-progress", "resolved", "wont-fix", "dismissed")
+        .contains(String.valueOf(finding.status()).toLowerCase(Locale.ROOT))) {
+      errors.add("Invalid review finding status in " + finding.id() + ": " + finding.status());
+    }
+    if (blank(finding.title())) errors.add("Review finding title is required: " + finding.id());
+    if (blank(finding.description())) {
+      errors.add("Review finding description is required: " + finding.id());
+    }
+    for (ReviewEvidence evidence : nvl(finding.evidence())) {
+      if (blank(evidence.path())) errors.add("Review evidence path is required: " + finding.id());
+      if (evidence.lineStart() != null && evidence.lineStart() < 1) {
+        errors.add("Review evidence lineStart must be positive: " + finding.id());
+      }
+      if (evidence.lineEnd() != null
+          && evidence.lineStart() != null
+          && evidence.lineEnd() < evidence.lineStart()) {
+        errors.add("Review evidence lineEnd precedes lineStart: " + finding.id());
+      }
+    }
+    requireUnique(
+        nvl(finding.proposedActions()).stream().map(ProposedReviewAction::id).toList(),
+        "Duplicate proposed review action id in " + finding.id() + ": ",
+        errors);
+    for (ProposedReviewAction action : nvl(finding.proposedActions())) {
+      if (blank(action.id())) errors.add("Proposed review action id is required: " + finding.id());
+      if (blank(action.type())) errors.add("Proposed review action type is required: " + finding.id());
+      if (!Set.of("proposed", "accepted", "applied", "rejected")
+          .contains(String.valueOf(action.status()).toLowerCase(Locale.ROOT))) {
+        errors.add("Invalid proposed review action status in " + action.id() + ": " + action.status());
+      }
+      if (blank(action.title())) warnings.add("Proposed review action title is missing: " + action.id());
+    }
+    if (spec != null) validateFindingSpecReferences(finding, spec, errors);
+    for (String adrId : nvl(finding.relatedAdrs())) {
+      if (!adrIds.contains(adrId)) errors.add("Unknown review finding ADR: " + adrId);
+    }
+    boolean terminal =
+        Set.of("resolved", "wont-fix", "dismissed")
+            .contains(String.valueOf(finding.status()).toLowerCase(Locale.ROOT));
+    if (terminal && finding.resolution() == null) {
+      errors.add("Terminal review finding requires a resolution: " + finding.id());
+    }
+    FindingResolution resolution = finding.resolution();
+    if (resolution != null) {
+      if (blank(resolution.summary())) {
+        errors.add("Finding resolution summary is required: " + finding.id());
+      }
+      if (!blank(resolution.relatedAdr()) && !adrIds.contains(resolution.relatedAdr())) {
+        errors.add("Unknown finding resolution ADR: " + resolution.relatedAdr());
+      }
+      if (!blank(resolution.relatedConstraint())
+          && (spec == null
+              || nvl(spec.structuredConstraints()).stream()
+                  .noneMatch(c -> resolution.relatedConstraint().equals(c.id())))) {
+        errors.add("Unknown finding resolution constraint: " + resolution.relatedConstraint());
+      }
+    }
+  }
+
+  private void validateFindingSpecReferences(
+      ReviewFinding finding, Spec spec, List<String> errors) {
+    Set<String> requirementIds = requirementIds(spec);
+    Set<String> acceptanceCriterionIds = acceptanceCriterionIds(spec);
+    Set<String> constraintIds =
+        nvl(spec.structuredConstraints()).stream()
+            .map(Constraint::id)
+            .collect(Collectors.toSet());
+    for (String id : nvl(finding.relatedRequirements())) {
+      if (!requirementIds.contains(id)) errors.add("Unknown review finding requirement: " + id);
+    }
+    for (String id : nvl(finding.relatedAcceptanceCriteria())) {
+      if (!acceptanceCriterionIds.contains(id)) {
+        errors.add("Unknown review finding acceptance criterion: " + id);
+      }
+    }
+    for (String id : nvl(finding.relatedConstraints())) {
+      if (!constraintIds.contains(id)) errors.add("Unknown review finding constraint: " + id);
+    }
   }
 
   private static List<String> distinct(List<String> values) {

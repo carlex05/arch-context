@@ -103,6 +103,88 @@ public class McpContextService {
         .orElseThrow(() -> new IllegalArgumentException("Unknown guidelineId: " + id));
   }
 
+  public ImplementationReview getImplementationReview(String id) {
+    return l.implementationReview(id)
+        .orElseThrow(() -> new IllegalArgumentException("Unknown reviewId: " + id));
+  }
+
+  public List<ImplementationReviewSummary> listImplementationReviews(
+      String specId, String repositoryId, String status) {
+    return l.implementationReviews().stream()
+        .filter(r -> blank(specId) || specId.equals(r.specId()))
+        .filter(r -> blank(repositoryId) || repositoryId.equals(r.repositoryId()))
+        .filter(r -> blank(status) || status.equalsIgnoreCase(r.status()))
+        .map(this::reviewSummary)
+        .toList();
+  }
+
+  public DeveloperReviewBriefing getReviewBriefingForDeveloper(
+      String reviewId, boolean includeResolved) {
+    ImplementationReview review = getImplementationReview(reviewId);
+    Spec spec = getSpecContext(review.specId());
+    RepositoryDefinition repository =
+        l.repository(review.repositoryId())
+            .orElseThrow(
+                () ->
+                    new IllegalArgumentException(
+                        "Unknown repositoryId: " + review.repositoryId()));
+    RepositoryChange repositoryChange =
+        nvl(spec.repositoryChanges()).stream()
+            .filter(change -> review.repositoryId().equals(change.repositoryId()))
+            .findFirst()
+            .orElse(null);
+    List<ReviewFinding> findings =
+        includeResolved
+            ? review.findings()
+            : review.findings().stream().filter(ReviewFinding::actionable).toList();
+    ImplementationReview filteredReview =
+        new ImplementationReview(
+            review.id(),
+            review.specId(),
+            review.repositoryId(),
+            review.branch(),
+            review.commit(),
+            review.reviewer(),
+            review.reviewDate(),
+            review.status(),
+            review.summary(),
+            review.statusNote(),
+            findings,
+            review.sourcePath());
+    Set<String> adrIds = new LinkedHashSet<>(relatedAdrIds(spec));
+    review.findings().stream().flatMap(f -> f.relatedAdrs().stream()).forEach(adrIds::add);
+    review.findings().stream()
+        .map(ReviewFinding::resolution)
+        .filter(Objects::nonNull)
+        .map(FindingResolution::relatedAdr)
+        .filter(id -> id != null && !id.isBlank())
+        .forEach(adrIds::add);
+    List<Adr> relatedAdrs = l.adrs().stream().filter(adr -> adrIds.contains(adr.id())).toList();
+    return new DeveloperReviewBriefing(
+        summary(spec),
+        repository,
+        repositoryChange,
+        filteredReview,
+        constraints(spec.structuredConstraints(), false),
+        relatedAdrs,
+        applicableGuidelines(repository));
+  }
+
+  private ImplementationReviewSummary reviewSummary(ImplementationReview review) {
+    return new ImplementationReviewSummary(
+        review.id(),
+        review.specId(),
+        review.repositoryId(),
+        review.branch(),
+        review.commit(),
+        review.reviewer(),
+        review.reviewDate(),
+        review.status(),
+        review.summary(),
+        review.findings().stream().filter(ReviewFinding::actionable).count(),
+        review.findings().size());
+  }
+
   public List<RepositoryDefinition> listRepositories() {
     return l.repositories();
   }
@@ -308,6 +390,11 @@ public class McpContextService {
           getAdrContext(uri.substring(uri.lastIndexOf('/') + 1)));
     if (uri.equals("archcontext://guidelines"))
       return dev.archcontext.util.Json.write(listGuidelines());
+    if (uri.equals("archcontext://reviews"))
+      return dev.archcontext.util.Json.write(listImplementationReviews(null, null, null));
+    if (uri.startsWith("archcontext://reviews/"))
+      return dev.archcontext.util.Json.write(
+          getImplementationReview(uri.substring(uri.lastIndexOf('/') + 1)));
     throw new IllegalArgumentException("Unknown resource URI: " + uri);
   }
 

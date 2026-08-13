@@ -387,6 +387,116 @@ public class YamlWorkspaceWriter {
     }
   }
 
+  public WriteResult createImplementationReview(ImplementationReview review, boolean dryRun) {
+    Path target = reviewFile(review.id());
+    validator.validateKnownWriteTarget(root, target);
+    WriteValidation validation = validator.validateImplementationReview(root, review);
+    ReviewFile existing = findImplementationReview(review.id());
+    if (existing != null) {
+      validation =
+          new WriteValidation(
+              append(validation.errors(), "Implementation review already exists: " + review.id()),
+              validation.warnings());
+    }
+    if (!validation.errors().isEmpty()) {
+      return result(
+          false, dryRun, target, "Implementation review was not written.", validation, review);
+    }
+    try {
+      YamlDocuments doc = new YamlDocuments();
+      doc.schemaVersion = "1.1";
+      doc.implementationReview = review;
+      if (!dryRun) {
+        writeAtomically(target, doc);
+        reindexReview(target, review.id());
+      }
+      return result(
+          true,
+          dryRun,
+          target,
+          "Created implementation review " + review.id() + ".",
+          validation,
+          review);
+    } catch (IOException e) {
+      return result(
+          false,
+          dryRun,
+          target,
+          "Implementation review was not written.",
+          new WriteValidation(List.of(e.getMessage()), validation.warnings()),
+          review);
+    }
+  }
+
+  public WriteResult upsertReviewFinding(
+      String reviewId, ReviewFinding finding, boolean dryRun) {
+    return updateImplementationReview(
+        reviewId,
+        dryRun,
+        "Review finding was not written.",
+        review -> {
+          List<ReviewFinding> findings = new ArrayList<>(nvl(review.findings()));
+          findings.removeIf(existing -> existing.id().equals(finding.id()));
+          findings.add(finding);
+          return implementationReview(review, review.status(), review.statusNote(), findings);
+        },
+        "Upserted review finding " + finding.id() + ".");
+  }
+
+  public WriteResult updateReviewFindingStatus(
+      String reviewId,
+      String findingId,
+      String status,
+      FindingResolution resolution,
+      boolean dryRun) {
+    return updateImplementationReview(
+        reviewId,
+        dryRun,
+        "Review finding status was not updated.",
+        review -> {
+          List<ReviewFinding> findings = new ArrayList<>(nvl(review.findings()));
+          ReviewFinding original =
+              findings.stream()
+                  .filter(finding -> findingId.equals(finding.id()))
+                  .findFirst()
+                  .orElseThrow(
+                      () ->
+                          new IllegalArgumentException(
+                              "Unknown findingId in review " + reviewId + ": " + findingId));
+          ReviewFinding updated =
+              new ReviewFinding(
+                  original.id(),
+                  original.type(),
+                  original.severity(),
+                  original.category(),
+                  status,
+                  original.title(),
+                  original.description(),
+                  original.evidence(),
+                  original.relatedRequirements(),
+                  original.relatedAcceptanceCriteria(),
+                  original.relatedConstraints(),
+                  original.relatedAdrs(),
+                  original.recommendation(),
+                  original.proposedActions(),
+                  resolution);
+          findings.removeIf(finding -> findingId.equals(finding.id()));
+          findings.add(updated);
+          return implementationReview(review, review.status(), review.statusNote(), findings);
+        },
+        "Updated review finding " + findingId + " to " + status + ".");
+  }
+
+  public WriteResult updateImplementationReviewStatus(
+      String reviewId, String status, String note, boolean dryRun) {
+    return updateImplementationReview(
+        reviewId,
+        dryRun,
+        "Implementation review status was not updated.",
+        review -> implementationReview(review, status, note, review.findings()),
+        "Updated implementation review " + reviewId + " to " + status + ".");
+  }
+
   public WriteResult upsertSpecRequirement(
       String specId, String requirementType, Requirement requirement, boolean dryRun) {
     return updateSpec(
@@ -1030,6 +1140,70 @@ public class YamlWorkspaceWriter {
       WriteValidation validation = new WriteValidation(List.of(e.getMessage()), List.of());
       return result(false, dryRun, specsDir(), failureSummary, validation, null);
     }
+  }
+
+  private WriteResult updateImplementationReview(
+      String reviewId,
+      boolean dryRun,
+      String failureSummary,
+      ReviewUpdater updater,
+      String successSummary) {
+    ReviewFile reviewFile = findImplementationReview(reviewId);
+    if (reviewFile == null) {
+      return result(
+          false,
+          dryRun,
+          reviewsDir(),
+          failureSummary,
+          new WriteValidation(List.of("Unknown reviewId: " + reviewId), List.of()),
+          null);
+    }
+    try {
+      validator.validateKnownWriteTarget(root, reviewFile.path());
+      ImplementationReview original = reviewFile.document().implementationReview;
+      ImplementationReview updated = updater.update(original);
+      WriteValidation validation = validator.validateImplementationReview(root, updated);
+      if (!validation.errors().isEmpty()) {
+        return result(false, dryRun, reviewFile.path(), failureSummary, validation, updated);
+      }
+      boolean changed = !updated.equals(original);
+      reviewFile.document().schemaVersion = "1.1";
+      reviewFile.document().implementationReview = updated;
+      if (changed && !dryRun) {
+        writeAtomically(reviewFile.path(), reviewFile.document());
+        reindexReview(reviewFile.path(), original.id());
+      }
+      String summary = changed ? successSummary : "No changes for review " + reviewId + ".";
+      return result(changed, dryRun, reviewFile.path(), summary, validation, updated);
+    } catch (IOException | IllegalArgumentException e) {
+      return result(
+          false,
+          dryRun,
+          reviewFile.path(),
+          failureSummary,
+          new WriteValidation(List.of(e.getMessage()), List.of()),
+          null);
+    }
+  }
+
+  private ImplementationReview implementationReview(
+      ImplementationReview review,
+      String status,
+      String statusNote,
+      List<ReviewFinding> findings) {
+    return new ImplementationReview(
+        review.id(),
+        review.specId(),
+        review.repositoryId(),
+        review.branch(),
+        review.commit(),
+        review.reviewer(),
+        review.reviewDate(),
+        status,
+        review.summary(),
+        statusNote,
+        findings,
+        review.sourcePath());
   }
 
   private Spec updateRequirement(Spec spec, String requirementType, Requirement requirement) {
@@ -1893,6 +2067,22 @@ public class YamlWorkspaceWriter {
     return null;
   }
 
+  private ReviewFile findImplementationReview(String reviewId) {
+    if (!Files.isDirectory(reviewsDir())) return null;
+    try (var paths = Files.list(reviewsDir())) {
+      for (Path path :
+          paths.filter(p -> p.getFileName().toString().endsWith(".yaml")).sorted().toList()) {
+        YamlDocuments doc = yaml.read(path);
+        if (doc.implementationReview != null && reviewId.equals(doc.implementationReview.id())) {
+          return new ReviewFile(path, doc);
+        }
+      }
+    } catch (IOException e) {
+      throw new IllegalArgumentException(e.getMessage(), e);
+    }
+    return null;
+  }
+
   private YamlDocuments readOrNew(Path path) throws IOException {
     return Files.exists(path) ? yaml.read(path) : new YamlDocuments();
   }
@@ -1927,6 +2117,19 @@ public class YamlWorkspaceWriter {
                 importService.importSpecFile(root, specFile, previousSpecId);
               } catch (RuntimeException e) {
                 System.err.println("ArchContext spec index refresh failed: " + e.getMessage());
+              }
+            });
+  }
+
+  private void reindexReview(Path reviewFile, String previousReviewId) {
+    validationCache = null;
+    pendingSpecIndexing =
+        SPEC_INDEX_EXECUTOR.submit(
+            () -> {
+              try {
+                importService.importReviewFile(root, reviewFile, previousReviewId);
+              } catch (RuntimeException e) {
+                System.err.println("ArchContext review index refresh failed: " + e.getMessage());
               }
             });
   }
@@ -1985,6 +2188,10 @@ public class YamlWorkspaceWriter {
     return archContextDir.resolve("guidelines");
   }
 
+  private Path reviewsDir() {
+    return archContextDir.resolve("reviews");
+  }
+
   private Path specFile(Spec spec) {
     return specsDir().resolve(slug(spec.id()) + ".yaml");
   }
@@ -1995,6 +2202,10 @@ public class YamlWorkspaceWriter {
 
   private Path guidelineFile(String guidelineId) {
     return guidelinesDir().resolve(slug(guidelineId) + ".yaml");
+  }
+
+  private Path reviewFile(String reviewId) {
+    return reviewsDir().resolve(slug(reviewId) + ".yaml");
   }
 
   private String relative(Path path) {
@@ -2034,6 +2245,8 @@ public class YamlWorkspaceWriter {
 
   private record SpecFile(Path path, YamlDocuments document) {}
 
+  private record ReviewFile(Path path, YamlDocuments document) {}
+
   private record WorkspaceFingerprint(long fileCount, long totalSize, long maxModifiedMillis) {}
 
   private record ValidationCache(
@@ -2047,5 +2260,10 @@ public class YamlWorkspaceWriter {
   @FunctionalInterface
   private interface RepositoryUpdater {
     RepositoryDefinition update(RepositoryDefinition repository);
+  }
+
+  @FunctionalInterface
+  private interface ReviewUpdater {
+    ImplementationReview update(ImplementationReview review);
   }
 }
