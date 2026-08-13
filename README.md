@@ -1,6 +1,6 @@
 # ArchContext
 
-ArchContext is a lightweight local MCP server for architecture context. It gives LLM coding agents structured access to solution descriptions, repository metadata, specs, ADRs, and engineering guidelines without requiring a remote service or heavyweight framework.
+ArchContext is a lightweight local MCP server for architecture context. It gives LLM coding agents structured access to solution descriptions, repository metadata, specs, ADRs, engineering guidelines, and implementation reviews without requiring a remote service or heavyweight framework.
 
 ## Why ArchContext exists
 
@@ -13,6 +13,7 @@ Modern software work often spans multiple repositories. Agents need more than th
 - **Spec**: a structured feature/change specification with requirements, acceptance criteria, constraints, affected repositories, and related ADRs.
 - **ADR**: an architecture decision record with context, decision, consequences, and impact.
 - **Guideline**: rules that apply by language and repository type.
+- **Implementation review**: findings against a specific spec, repository, branch, and Git commit, including code evidence, proposed context actions, and traceable resolutions.
 - **YAML source of truth**: `.archcontext/*.yaml` files are human-editable and versionable.
 - **SQLite local index**: `.archcontext/archcontext.db` is a local cache/search index rebuilt by `archcontext import`.
 - **MCP stdio server**: `archcontext mcp` exposes resources, tools, and prompts through the official Java MCP SDK stdio transport. stdout is reserved for MCP protocol messages in MCP mode.
@@ -195,6 +196,7 @@ Edit or create the shared context files:
 .archcontext/specs/*.yaml
 .archcontext/adrs/*.yaml
 .archcontext/guidelines/*.yaml
+.archcontext/reviews/*.yaml
 ```
 
 Refresh the local SQLite index and validate the workspace:
@@ -212,7 +214,8 @@ git add .archcontext/.gitignore \
   .archcontext/repositories.yaml \
   .archcontext/specs \
   .archcontext/adrs \
-  .archcontext/guidelines
+  .archcontext/guidelines \
+  .archcontext/reviews
 
 git commit -m "Initialize ArchContext workspace"
 ```
@@ -273,6 +276,7 @@ Shared and versioned:
 - `.archcontext/specs/*.yaml`
 - `.archcontext/adrs/*.yaml`
 - `.archcontext/guidelines/*.yaml`
+- `.archcontext/reviews/*.yaml`
 
 Local or generated, not committed:
 
@@ -303,6 +307,9 @@ Run `archcontext import` after editing shared YAML or local overrides.
 5. Developer runs `archcontext import`.
 6. Developer connects their MCP-compatible agent.
 7. Agent queries ArchContext tools for solution, repository, and spec context.
+8. After implementation, the TL or review agent records findings against the reviewed Git commit.
+9. The developer pulls the shared context and requests a correction briefing with only actionable findings.
+10. Resolved findings record the ADR or spec constraint created from the review when applicable.
 
 ## Relationships
 
@@ -310,6 +317,8 @@ Run `archcontext import` after editing shared YAML or local overrides.
 - ADRs relate to repositories through `affectedRepositories`.
 - Specs and ADRs relate through `relatedAdrs` and `relatedSpecs`.
 - Guidelines apply through `appliesTo.languages` and `appliesTo.repositoryTypes`.
+- Implementation reviews relate a spec and one affected repository to an exact Git commit.
+- Review findings may reference requirements, acceptance criteria, constraints, and ADRs.
 
 ## MCP client configuration example
 
@@ -374,6 +383,8 @@ ArchContext uses the official Java MCP SDK. The currently integrated SDK version
 - Use `resolve_repository_by_path` when an agent is running inside a local checkout and needs its ArchContext repository id.
 - Use `get_repository_implementation_context_for_spec` for repo-scoped implementation work; it returns the local repositoryChange, applicable requirements, acceptance criteria, contracts, constraints, ADRs, guidelines, and other affected repositories.
 - Use `get_agent_briefing_for_spec` when an implementation agent needs one consolidated payload for one spec and one repository.
+- Use `get_review_briefing_for_developer` after code review; it excludes resolved, dismissed, and `wont-fix` findings by default.
+- Use `get_implementation_review` only when the full review history is required. `list_implementation_reviews` returns compact summaries.
 - Use `search_context` for targeted architecture lookup.
 - Prefer tools over broad resources for implementation workflows.
 
@@ -414,10 +425,15 @@ Current write tools:
 - `update_adr_status`: change one ADR status, optionally recording `supersededBy` and a status note.
 - `append_adr_change`: append or update one structured change-log entry in an existing ADR.
 - `supersede_adr`: mark one existing ADR as superseded by another existing ADR and link both.
+- `create_implementation_review`: create a review under `.archcontext/reviews/*.yaml` tied to one spec, repository, and Git commit.
+- `upsert_review_finding`: add or update one finding with evidence, context references, recommendation, and proposed actions.
+- `update_review_finding_status`: update a finding and record its resolution, including a resulting ADR or constraint.
+- `update_implementation_review_status`: move a review through `draft`, `in-progress`, `changes-requested`, `approved`, or `closed`.
 - `validate_spec_consistency`: validate deterministic consistency rules for superseding, relations, and repositoryChanges.
 - `suggest_next_requirement_id`, `suggest_next_acceptance_criterion_id`, `suggest_next_constraint_id`: suggest the next conventional id in a spec.
 - `validate_spec_repository_coverage`: validate repositoryChanges coverage for one spec.
 - `validate_workspace`: validate repository references, component references, active spec readiness, related ADRs, and schema versions without writing files.
+- `validate_workspace` also validates review lifecycle, unique finding/action IDs, code evidence, and references to specs, repositories, ADRs, requirements, acceptance criteria, and constraints.
 
 For Spec-Driven Development, acceptance criteria, constraints, repositoryChanges, contracts, and out-of-scope items are central. They make the implementation boundary explicit for both humans and agents: what must be true, what architectural rules must be respected, which repository owns which part, what contracts connect repositories, and what must not be implemented in the current change.
 
@@ -428,6 +444,10 @@ Specs and ADRs can also carry a structured `changeLog`. Implementation-oriented 
 Superseding tools link resources that already exist. Create the replacement spec or ADR first, then call `supersede_spec` or `supersede_adr` to update both sides and append traceability entries.
 
 Implementation context tools keep payloads compact by default. Use `includeSuperseded: true` to include obsolete/superseded/rejected items, `includeChangeLog: "none" | "summary" | "full"` to control changelog depth, and `maxHistoricalItems` to adjust summary length.
+
+Implementation reviews are separate from spec and ADR changelogs. A review describes corrections required in one concrete implementation; a changelog explains why shared architecture context changed. Reviews can propose actions such as `create-adr` or `add-constraint`, but they do not apply architecture changes automatically. Create the ADR or constraint explicitly, then resolve the finding with `relatedAdr` or `relatedConstraint`. A review cannot be approved while it has actionable findings.
+
+Review payloads are context-conscious: list operations return summaries, developer briefings return only actionable findings by default, and the full history is opt-in through `includeResolved: true`. Review YAML is indexed as document type `review`, so targeted queries can use `search_context` without loading every review.
 
 Write tools are intentionally constrained:
 
@@ -952,6 +972,8 @@ Resources:
 - `archcontext://adrs`
 - `archcontext://adrs/{adrId}`
 - `archcontext://guidelines`
+- `archcontext://reviews`
+- `archcontext://reviews/{reviewId}`
 
 Tools:
 
@@ -1007,6 +1029,13 @@ Tools:
 - `update_adr_status`
 - `append_adr_change`
 - `supersede_adr`
+- `create_implementation_review`
+- `upsert_review_finding`
+- `update_review_finding_status`
+- `update_implementation_review_status`
+- `get_implementation_review`
+- `list_implementation_reviews`
+- `get_review_briefing_for_developer`
 - `validate_spec_repository_coverage`
 - `validate_workspace`
 
@@ -1033,6 +1062,8 @@ workspace/
       ADR-001.yaml
     guidelines/
       java-backend.yaml
+    reviews/
+      REV-SPEC-001-BOOKING-API.yaml
   booking-api/
   payment-service/
 ```
@@ -1040,7 +1071,7 @@ workspace/
 ## Example workflow
 
 1. An architect creates or updates `.archcontext` YAML context.
-2. Shared context such as `solution.yaml`, `repositories.yaml`, specs, ADRs, and guidelines is committed to Git.
+2. Shared context such as `solution.yaml`, `repositories.yaml`, specs, ADRs, guidelines, and implementation reviews is committed to Git.
 3. A developer pulls the context.
 4. The developer adjusts `.archcontext/local.yaml` if local paths differ.
 5. The developer runs `archcontext import` to refresh the local SQLite index.

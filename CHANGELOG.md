@@ -2,6 +2,37 @@
 
 All notable changes to ArchContext are documented in this file.
 
+## Unreleased
+
+### Added
+
+- Structured implementation reviews tied to a spec, repository, branch, and Git commit.
+- Review findings with severity, lifecycle status, code evidence, spec/ADR references, recommendations, and proposed context actions.
+- Incremental review tools:
+  - `create_implementation_review`
+  - `upsert_review_finding`
+  - `update_review_finding_status`
+  - `update_implementation_review_status`
+- Review query tools and resources:
+  - `get_implementation_review`
+  - `list_implementation_reviews`
+  - `get_review_briefing_for_developer`
+  - `archcontext://reviews`
+  - `archcontext://reviews/{reviewId}`
+- Review documents in targeted `search_context` queries through document type `review`.
+
+### Changed
+
+- `archcontext init` now creates the versionable `.archcontext/reviews` directory.
+- `validate_workspace` validates review references, finding/action identifiers, evidence ranges, lifecycle states, and resolutions.
+- Review list and developer briefing responses are compact by default; resolved history is opt-in.
+
+### Architecture Notes
+
+- Reviews remain separate from spec and ADR changelogs: findings describe required implementation corrections, while changelogs explain context changes.
+- Review actions may propose ADRs or constraints but never create them implicitly. The resulting context is linked when the finding is resolved.
+- Reviews cannot be approved while actionable findings remain.
+
 ## 0.2.0 - 2026-06-25
 
 ### Added
